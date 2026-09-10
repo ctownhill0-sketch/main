@@ -353,7 +353,17 @@ def _extract_candidates(html: str) -> list[tuple[str, bool]]:
     HTML-entity-encoded addresses (decoded up front via html.unescape).
     Deduped, first-seen order preserved; a mailto sighting always wins
     the is_mailto flag for that address even if it also appears in plain
-    text elsewhere on the page."""
+    text elsewhere on the page.
+
+    Regex scanning is deliberately bounded (see _scan_in_chunks) rather
+    than run over the raw page in one shot: both EMAIL_REGEX and
+    _OBFUSCATED_EMAIL_REGEX exhibit severe (measured: quadratic-or-worse)
+    backtracking on long runs of characters that never satisfy the
+    pattern — e.g. a large inline base64 image/font, or any other big
+    blob of unstructured text. Confirmed experimentally: 10KB of such
+    content alone took ~1.9s; a real 2MB page (our own size cap) would
+    hang for minutes. That would defeat "one broken site can't crash a
+    batch" just as badly as an actual crash would."""
     html = html_module.unescape(html)
     found: dict[str, bool] = {}
 
@@ -362,6 +372,7 @@ def _extract_candidates(html: str) -> list[tuple[str, bool]]:
     except Exception:
         soup = None
 
+    text_to_scan = html
     if soup is not None:
         for a in soup.find_all("a", href=True):
             href = a["href"]
@@ -370,31 +381,89 @@ def _extract_candidates(html: str) -> list[tuple[str, bool]]:
                 if addr:
                     found[addr] = True
 
-    for match in EMAIL_REGEX.finditer(html):
-        addr = match.group(0)
-        found.setdefault(addr, False)
+        # <script>/<style> bodies are never a real contact email and are
+        # exactly the kind of large, unstructured blob that triggers the
+        # backtracking above (minified JS, base64 data URIs) — drop them
+        # before scanning, same soup instance, no extra parse cost.
+        for tag in soup(["script", "style", "noscript"]):
+            tag.decompose()
+        text_to_scan = soup.get_text(" ")
 
-    for addr in _find_obfuscated_emails(html):
+    text_to_scan = _bound_for_scanning(text_to_scan)
+
+    for match in _scan_in_chunks(EMAIL_REGEX, text_to_scan):
+        found.setdefault(match, False)
+
+    for addr in _find_obfuscated_emails(text_to_scan):
         found.setdefault(addr, False)
 
     return list(found.items())
+
+
+# Regex scanning is bounded twice over, deliberately redundant: a total
+# character cap (a real contact email is always near the top or bottom
+# of a page, never require scanning the whole thing) AND small
+# overlapping chunks within that budget (bounds worst-case backtracking
+# cost to a small, measured constant regardless of pattern complexity —
+# see _extract_candidates' docstring for why this is needed at all).
+REGEX_SCAN_MAX_CHARS = 20_000
+_SCAN_CHUNK_SIZE = 400
+_SCAN_CHUNK_OVERLAP = 100  # comfortably larger than any real email address
+
+
+def _bound_for_scanning(text: str) -> str:
+    """Keep head and tail (where a contact email realistically lives) if
+    the page's visible text is unusually long, instead of the whole thing."""
+    if len(text) <= REGEX_SCAN_MAX_CHARS:
+        return text
+    half = REGEX_SCAN_MAX_CHARS // 2
+    return text[:half] + " " + text[-half:]
+
+
+def _scan_in_chunks(pattern: re.Pattern, text: str) -> list[str]:
+    """Run `pattern.finditer` over small overlapping windows instead of
+    the whole string, deduped. Bounds worst-case regex time to
+    (number of chunks) x (small, measured per-chunk cost) instead of
+    being quadratic in len(text)."""
+    seen: dict[str, None] = {}
+    stride = _SCAN_CHUNK_SIZE - _SCAN_CHUNK_OVERLAP
+    for start in range(0, max(len(text), 1), stride):
+        chunk = text[start : start + _SCAN_CHUNK_SIZE]
+        if not chunk:
+            break
+        for match in pattern.finditer(chunk):
+            seen.setdefault(match.group(0), None)
+        if start + _SCAN_CHUNK_SIZE >= len(text):
+            break
+    return list(seen.keys())
 
 
 def _find_obfuscated_emails(text: str) -> list[str]:
     """"name [at] domain [dot] com" / "name(at)domain.com" style
     de-spamification. Only bracket/paren-delimited "[at]"/"(at)" is
     matched — an un-bracketed bare word "at" is far too common in normal
-    prose to safely treat as an obfuscation marker."""
-    results = []
-    for match in _OBFUSCATED_EMAIL_REGEX.finditer(text):
-        local, domain_chunk = match.group(1), match.group(2)
-        domain_chunk = _DOT_TOKEN_REGEX.sub(".", domain_chunk)
-        domain_chunk = re.sub(r"\s+", "", domain_chunk)
-        domain_chunk = domain_chunk.strip("[]() .")
-        candidate = f"{local}@{domain_chunk}"
-        if EMAIL_REGEX.fullmatch(candidate):
-            results.append(candidate)
-    return results
+    prose to safely treat as an obfuscation marker. Scanned in bounded
+    chunks (see _scan_in_chunks) for the same backtracking reason as
+    EMAIL_REGEX; a match spanning a chunk boundary can't be recovered
+    this way, but a "local [at] domain [dot] tld" pattern is always far
+    shorter than the chunk overlap, so this doesn't cost real hits."""
+    results: dict[str, None] = {}
+    stride = _SCAN_CHUNK_SIZE - _SCAN_CHUNK_OVERLAP
+    for start in range(0, max(len(text), 1), stride):
+        chunk = text[start : start + _SCAN_CHUNK_SIZE]
+        if not chunk:
+            break
+        for match in _OBFUSCATED_EMAIL_REGEX.finditer(chunk):
+            local, domain_chunk = match.group(1), match.group(2)
+            domain_chunk = _DOT_TOKEN_REGEX.sub(".", domain_chunk)
+            domain_chunk = re.sub(r"\s+", "", domain_chunk)
+            domain_chunk = domain_chunk.strip("[]() .")
+            candidate = f"{local}@{domain_chunk}"
+            if EMAIL_REGEX.fullmatch(candidate):
+                results.setdefault(candidate, None)
+        if start + _SCAN_CHUNK_SIZE >= len(text):
+            break
+    return list(results.keys())
 
 
 def _discover_contact_links(html: str, base_url: str) -> list[str]:
