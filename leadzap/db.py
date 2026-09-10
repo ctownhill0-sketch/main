@@ -63,7 +63,17 @@ UPDATABLE_COLUMNS = {
 
 @contextmanager
 def get_conn() -> Iterator[sqlite3.Connection]:
-    conn = sqlite3.connect(DB_PATH)
+    # WAL mode lets readers and a writer proceed concurrently instead of
+    # blocking each other outright (the default DELETE journal mode
+    # would readily throw "database is locked" once enrichment runs
+    # multiple leads at once — see main.py's _run_enrichment_job).
+    # busy_timeout makes any remaining brief contention wait and retry
+    # instead of failing immediately. Pulled forward from the planned
+    # Phase 4 DB-integrity pass because Phase 3's concurrent enrichment
+    # depends on it; the rest of Phase 4 is still a separate pass.
+    conn = sqlite3.connect(DB_PATH, timeout=10.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=10000")
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -178,6 +188,19 @@ def get_lead(lead_id: int) -> Optional[dict[str, Any]]:
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM leads WHERE id = ?", (lead_id,)).fetchone()
         return dict(row) if row else None
+
+
+def count_other_leads_with_email(email: str, exclude_lead_id: int) -> int:
+    """How many OTHER leads already have this exact email saved. Used to
+    catch a web agency's address reused across many unrelated client
+    sites — a pattern the domain-match confidence check mostly (but not
+    always) already catches on its own."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) c FROM leads WHERE email = ? AND id != ?",
+            (email, exclude_lead_id),
+        ).fetchone()
+        return row["c"]
 
 
 def get_leads(

@@ -4,9 +4,11 @@ Run with: uvicorn main:app --reload
 """
 from __future__ import annotations
 
+import concurrent.futures
 import csv
 import io
 import os
+import threading
 from datetime import date, timedelta
 from typing import Any, Optional
 
@@ -30,13 +32,24 @@ app = FastAPI(title="LeadZap")
 
 # In-memory state for the currently running (if any) enrichment batch.
 # A single-user local tool only ever has one job running at a time, so a
-# module-level dict is sufficient — no job queue needed.
+# module-level dict is sufficient — no job queue needed. _progress_lock
+# guards both this dict (mutated from multiple worker threads once a
+# batch is running concurrently) and the "is a job already running"
+# check-and-set below, which closes a race where two rapid requests could
+# otherwise both start a batch before either had set running=True.
 enrichment_progress: dict[str, Any] = {
     "running": False,
     "total": 0,
     "done": 0,
     "current_name": "",
 }
+_progress_lock = threading.Lock()
+
+# How many leads are enriched at once within a batch. Different domains
+# fetch fully in parallel; the per-domain rate limiter in enrich.py is
+# what keeps requests to the SAME domain to 1/sec regardless of this
+# number — see enrich._respect_rate_limit.
+ENRICH_CONCURRENCY = 5
 
 
 @app.on_event("startup")
@@ -158,46 +171,91 @@ class EnrichRequest(BaseModel):
     lead_ids: list[int]
 
 
-def _run_enrichment_job(lead_ids: list[int]) -> None:
-    """Runs in a worker thread (via FastAPI's BackgroundTasks) so the
-    server keeps answering progress-poll requests while it works."""
-    enrichment_progress.update(running=True, total=len(lead_ids), done=0, current_name="")
+def _enrich_one(lead_id: int) -> None:
+    """Enriches a single lead and writes its result. Runs inside the
+    batch's ThreadPoolExecutor — one lead's failure (including a DB
+    hiccup, not just a scraping failure) must never take down the rest
+    of the batch, so everything here is caught."""
     try:
-        for lead_id in lead_ids:
-            lead = db.get_lead(lead_id)
-            if not lead:
-                enrichment_progress["done"] += 1
-                continue
+        lead = db.get_lead(lead_id)
+        if not lead:
+            return
 
+        with _progress_lock:
             enrichment_progress["current_name"] = lead["name"]
-            result = enrich.enrich_lead(lead.get("website"))
-            db.update_lead(
-                lead_id,
-                enrichment_status=result.status,
-                email=result.email,
-                email_source_url=result.source_url,
-                email_confidence=result.confidence,
-            )
-            enrichment_progress["done"] += 1
+
+        result = enrich.enrich_lead(lead.get("website"))
+
+        confidence = result.confidence
+        if result.status == "found" and result.email:
+            # A web-agency address reused across many unrelated client
+            # sites is suspect even when it happens to pass the
+            # domain-match check. Two or more OTHER leads already
+            # carrying this exact email is a reasonable bar for "shared."
+            if db.count_other_leads_with_email(result.email, exclude_lead_id=lead_id) >= 2:
+                confidence = "low"
+
+        db.update_lead(
+            lead_id,
+            enrichment_status=result.status,
+            email=result.email,
+            email_source_url=result.source_url,
+            email_confidence=confidence,
+        )
+    except Exception:
+        try:
+            db.update_lead(lead_id, enrichment_status="failed")
+        except Exception:
+            pass
     finally:
-        enrichment_progress["running"] = False
+        with _progress_lock:
+            enrichment_progress["done"] += 1
+
+
+def _run_enrichment_job(lead_ids: list[int]) -> None:
+    """Runs in a worker thread (via FastAPI's BackgroundTasks), which
+    keeps it off the asyncio event loop so the server keeps answering
+    other requests while it works. Enriches up to ENRICH_CONCURRENCY
+    leads at once — different domains proceed in parallel; enrich.py's
+    per-domain lock is what keeps any single domain to 1 req/sec
+    regardless of this concurrency. (enrichment_progress's running/total
+    fields are already set by _try_start_job before this was scheduled.)"""
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=ENRICH_CONCURRENCY) as executor:
+            list(executor.map(_enrich_one, lead_ids))
+    finally:
+        with _progress_lock:
+            enrichment_progress["running"] = False
+
+
+def _try_start_job(lead_ids: list[int]) -> bool:
+    """Atomically checks-and-sets the running flag so two near-
+    simultaneous requests can't both start a batch — BackgroundTasks
+    only actually starts running _run_enrichment_job after the response
+    is sent, so without this lock the plain 'if running: reject' check in
+    each endpoint has a real window where both could pass it."""
+    with _progress_lock:
+        if enrichment_progress["running"]:
+            return False
+        enrichment_progress.update(running=True, total=len(lead_ids), done=0, current_name="")
+        return True
 
 
 @app.post("/api/enrich/selected")
 def enrich_selected(payload: EnrichRequest, background_tasks: BackgroundTasks) -> dict[str, Any]:
-    if enrichment_progress["running"]:
-        raise HTTPException(status_code=409, detail="An enrichment job is already running.")
     if not payload.lead_ids:
         raise HTTPException(status_code=400, detail="No leads selected.")
+    if not _try_start_job(payload.lead_ids):
+        raise HTTPException(status_code=409, detail="An enrichment job is already running.")
     background_tasks.add_task(_run_enrichment_job, payload.lead_ids)
     return {"started": True, "count": len(payload.lead_ids)}
 
 
 @app.post("/api/enrich/all-missing")
 def enrich_all_missing(background_tasks: BackgroundTasks) -> dict[str, Any]:
-    if enrichment_progress["running"]:
-        raise HTTPException(status_code=409, detail="An enrichment job is already running.")
     lead_ids = db.get_lead_ids_missing_enrichment()
+    if not _try_start_job(lead_ids):
+        raise HTTPException(status_code=409, detail="An enrichment job is already running.")
     background_tasks.add_task(_run_enrichment_job, lead_ids)
     return {"started": True, "count": len(lead_ids)}
 

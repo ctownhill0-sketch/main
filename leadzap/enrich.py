@@ -1,13 +1,24 @@
 """Email enrichment: scrape a business website for a public contact email.
 
 Politeness rules (do not remove): descriptive User-Agent, 10s timeout,
-max 1 request/second per domain, robots.txt is checked before every
-fetch, and at most 4 pages are fetched per business. Every network call
-is wrapped so a single broken site can never crash a batch run.
+max 1 request/second per domain (genuinely per-domain — see
+_respect_rate_limit), robots.txt is checked before every fetch, at most
+4 pages are fetched per business, redirects and response size are
+capped. Every network call is wrapped so a single broken site can never
+crash a batch run.
+
+Concurrency note: this module's HTTP calls are synchronous (httpx.Client,
+not AsyncClient) and use time.sleep() for rate limiting. That's safe only
+because callers must run enrich_lead() off the asyncio event loop thread
+(main.py does this via a worker thread pool) — see main.py's
+_run_enrichment_job for the concurrency model and its own docstring for
+how that's verified.
 """
 from __future__ import annotations
 
+import html as html_module
 import re
+import threading
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -21,16 +32,73 @@ USER_AGENT = "LeadZapBot/1.0 (local lead-gen tool for outreach research)"
 TIMEOUT_SECONDS = 10.0
 MAX_PAGES_PER_BUSINESS = 4
 MIN_SECONDS_BETWEEN_REQUESTS_PER_DOMAIN = 1.0
+MAX_REDIRECTS = 5
+# A real contact page is a few KB to a few hundred KB. Capping reads here
+# means a 50MB page (or a misconfigured server streaming forever) can
+# never eat unbounded memory or time — we just stop reading and work with
+# whatever arrived.
+MAX_RESPONSE_BYTES = 2_000_000
+
 CONTACT_PATHS = ["/contact", "/contact-us", "/about", "/about-us"]
+# Keywords used to recognize a contact-ish link when we discover real
+# navigation links on the homepage, instead of only guessing fixed paths.
+CONTACT_LINK_KEYWORDS = ("contact", "about", "get-in-touch", "reach-us", "connect")
+
+# Websites that are really just a social/aggregator profile rather than a
+# real site. Scraping facebook.com/some-business for a contact page wastes
+# the whole per-business page budget (and is blocked by their robots.txt
+# anyway) — short-circuit instead.
+SOCIAL_AGGREGATOR_DOMAINS = {
+    "facebook.com", "instagram.com", "linkedin.com", "linktr.ee",
+    "twitter.com", "x.com", "yelp.com", "youtube.com", "tiktok.com",
+    "m.me", "pinterest.com",
+}
+
+# Role-based addresses are more likely to be the right inbox — and less
+# likely to be a random staff member who's left the company — than a
+# personal-looking one, so they're preferred when a page has several.
+ROLE_LOCAL_PARTS = {
+    "info", "contact", "hello", "office", "admin", "sales", "support",
+    "enquiries", "inquiries", "help",
+}
 
 EMAIL_REGEX = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+# Matches "name [at] domain [dot] com" and "name(at)domain.com" style
+# obfuscation. Deliberately requires the "at" token to be bracketed or
+# parenthesized: without that anchor, a bare word "at" (extremely common
+# in ordinary English) would false-positive constantly. The domain is an
+# explicit "label (dot-separator label)+" structure — where each
+# separator is either a literal "." or a bracketed "[dot]"/"(dot)" — so
+# matching stops at a real domain boundary instead of the first
+# whitespace, which a non-greedy blob-plus-lookahead approach doesn't.
+_DOMAIN_LABEL = r"[a-zA-Z0-9-]+"
+_DOT_SEPARATOR = r"\s*(?:\.|[\[\(]\s*dot\s*[\]\)])\s*"
+_OBFUSCATED_EMAIL_REGEX = re.compile(
+    rf"([a-zA-Z0-9._%+-]+)\s*[\[\(]\s*at\s*[\]\)]\s*"
+    rf"({_DOMAIN_LABEL}(?:{_DOT_SEPARATOR}{_DOMAIN_LABEL})+)",
+    re.IGNORECASE,
+)
+_DOT_TOKEN_REGEX = re.compile(r"[\[\(]\s*dot\s*[\]\)]", re.IGNORECASE)
+
 BLOCKED_LOCAL_PREFIXES = ("noreply", "no-reply", "donotreply")
 BLOCKED_DOMAINS = {"sentry.io", "wixpress.com", "godaddy.com", "squarespace.com", "example.com"}
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 
-# Tracks the last request time per domain so we never exceed 1 req/sec/domain,
-# even across the several fetches made for a single business.
+# Tracks the last request time per domain, each guarded by its OWN lock
+# (see _get_domain_lock) so requests to different domains never wait on
+# each other — only requests to the SAME domain are serialized to
+# respect the 1 req/sec limit. A single global lock would be simpler but
+# would serialize the entire batch regardless of domain, which is exactly
+# the bug this design avoids.
 _last_request_at: dict[str, float] = {}
+_domain_locks: dict[str, threading.Lock] = {}
+_domain_locks_guard = threading.Lock()
+
+
+class _ConnectFailed(Exception):
+    """Internal signal: the homepage couldn't even be reached on this
+    scheme (DNS/connect/TLS failure) — caller may retry the other scheme.
+    Never escapes this module."""
 
 
 @dataclass
@@ -42,63 +110,166 @@ class Enrichment:
 
 
 def enrich_lead(website: Optional[str]) -> Enrichment:
-    """Scrape a business website for its first plausible contact email.
+    """Scrape a business website for the best plausible contact email.
 
-    Tries the homepage, then a handful of common contact pages, stopping
-    as soon as a valid email is found or MAX_PAGES_PER_BUSINESS is hit.
-    Never raises — any failure comes back as Enrichment(status='failed').
+    Discovers real contact/about links from the homepage (falling back to
+    a handful of guessed paths only if none are found), collects every
+    valid candidate up to MAX_PAGES_PER_BUSINESS, and prefers a role-based
+    mailto address over a personal-looking one. Retries once on the other
+    scheme (http/https) if the site can't even be connected to. Never
+    raises — any failure comes back as Enrichment(status='failed').
     """
     if not website:
         return Enrichment(status="no_website")
 
+    netloc = _extract_netloc(website)
+    if not netloc:
+        return Enrichment(status="failed")
+    if _is_social_or_aggregator(netloc):
+        return Enrichment(status="not_found")
+
+    preferred_scheme = "http" if website.strip().lower().startswith("http://") else "https"
+    fallback_scheme = "http" if preferred_scheme == "https" else "https"
+
+    for scheme in (preferred_scheme, fallback_scheme):
+        try:
+            return _scrape_site(f"{scheme}://{netloc}", netloc)
+        except _ConnectFailed:
+            continue
+        except Exception:
+            return Enrichment(status="failed")
+    return Enrichment(status="failed")
+
+
+def _extract_netloc(website: str) -> Optional[str]:
     try:
         parsed = urlparse(website if "://" in website else f"https://{website}")
-        if not parsed.netloc:
-            return Enrichment(status="failed")
-        base_url = f"{parsed.scheme}://{parsed.netloc}"
-        website_domain = parsed.netloc
+        return parsed.netloc or None
     except Exception:
-        return Enrichment(status="failed")
+        return None
 
+
+def _is_social_or_aggregator(netloc: str) -> bool:
+    return _root_domain(netloc) in SOCIAL_AGGREGATOR_DOMAINS
+
+
+def _scrape_site(base_url: str, netloc: str) -> Enrichment:
+    """Fetch pages for one business (one scheme) and return the best
+    email found. Raises _ConnectFailed if the homepage itself can't be
+    reached, so the caller can retry the other scheme."""
+    candidates: list[tuple[str, bool, str]] = []  # (email, is_mailto, source_url)
     pages_fetched = 0
-    try:
-        with httpx.Client(
-            follow_redirects=True, timeout=TIMEOUT_SECONDS, headers={"User-Agent": USER_AGENT}
-        ) as client:
-            robots = _load_robots(client, base_url)
-            candidate_urls = [base_url] + [urljoin(base_url, path) for path in CONTACT_PATHS]
 
-            for url in candidate_urls:
-                if pages_fetched >= MAX_PAGES_PER_BUSINESS:
-                    break
-                if not robots.can_fetch(USER_AGENT, url):
-                    continue
+    with httpx.Client(
+        follow_redirects=True,
+        max_redirects=MAX_REDIRECTS,
+        timeout=TIMEOUT_SECONDS,
+        headers={"User-Agent": USER_AGENT},
+    ) as client:
+        robots = _load_robots(client, base_url)
 
-                html = _fetch(client, url)
-                if html is None:
-                    continue
-                pages_fetched += 1
+        try:
+            homepage_html = _fetch_raise(client, base_url)
+        except httpx.RequestError as exc:
+            raise _ConnectFailed() from exc
+        pages_fetched += 1
 
-                email = _find_email_in_html(html)
-                if not email:
-                    continue
-                is_valid, confidence = _validate_email(email, website_domain)
-                if is_valid:
-                    return Enrichment(status="found", email=email.lower(), source_url=url, confidence=confidence)
-    except Exception:
-        return Enrichment(status="failed")
+        if homepage_html:
+            candidates.extend(
+                (email, is_mailto, base_url) for email, is_mailto in _extract_candidates(homepage_html)
+            )
+            if _has_strong_match(candidates):
+                return _finalize(candidates, netloc, pages_fetched)
+            pages_to_check = _discover_contact_links(homepage_html, base_url)
+        else:
+            pages_to_check = []
 
-    if pages_fetched == 0:
-        return Enrichment(status="failed")
-    return Enrichment(status="not_found")
+        if not pages_to_check:
+            pages_to_check = [urljoin(base_url, path) for path in CONTACT_PATHS]
+
+        for url in pages_to_check:
+            if pages_fetched >= MAX_PAGES_PER_BUSINESS:
+                break
+            if not robots.can_fetch(USER_AGENT, url):
+                continue
+            page_html = _fetch_safe(client, url)
+            pages_fetched += 1  # counts the attempt, same as the homepage fetch above, even on failure
+            if page_html is None:
+                continue
+            candidates.extend(
+                (email, is_mailto, url) for email, is_mailto in _extract_candidates(page_html)
+            )
+            if _has_strong_match(candidates):
+                break
+
+    return _finalize(candidates, netloc, pages_fetched)
+
+
+def _has_strong_match(candidates: list[tuple[str, bool, str]]) -> bool:
+    """Any mailto-sourced address is already the strongest signal a page
+    can give (an explicit, deliberate contact link) — stop spending page
+    budget once we have one, same as the original "mailto first" design.
+    Role-based preference still applies when ranking multiple candidates
+    found together on one page (_choose_best_email); it only widens the
+    search to more pages when the homepage yields no mailto at all (just
+    a plain-text or obfuscated match, or nothing). Earlier this checked
+    for a role-based mailto specifically, which meant a business whose
+    homepage had a perfectly good but non-role mailto (e.g. "shared@...")
+    would still burn the full 4-page budget hunting for something
+    "better" that usually isn't there — measurably slower for no real
+    quality gain in the common case."""
+    return any(is_mailto for _, is_mailto, _ in candidates)
+
+
+def _finalize(candidates: list[tuple[str, bool, str]], netloc: str, pages_fetched: int) -> Enrichment:
+    best = _choose_best_email(candidates, netloc)
+    if best is None:
+        return Enrichment(status="failed" if pages_fetched == 0 else "not_found")
+    return Enrichment(status="found", email=best["email"], source_url=best["source_url"], confidence=best["confidence"])
+
+
+def _choose_best_email(
+    candidates: list[tuple[str, bool, str]], website_domain: str
+) -> Optional[dict[str, str]]:
+    """Validate every candidate, then rank: role-based address first,
+    then same-domain (high confidence), then mailto-sourced, then
+    earliest found — stable sort preserves discovery order as the final
+    tiebreak."""
+    validated = []
+    for email, is_mailto, source_url in candidates:
+        ok, confidence = _validate_email(email, website_domain)
+        if not ok:
+            continue
+        local = email.lower().split("@", 1)[0]
+        validated.append(
+            {
+                "email": email.lower(),
+                "source_url": source_url,
+                "confidence": confidence,
+                "is_role": local in ROLE_LOCAL_PARTS,
+                "is_mailto": is_mailto,
+            }
+        )
+    if not validated:
+        return None
+    validated.sort(key=lambda c: (not c["is_role"], c["confidence"] != "high", not c["is_mailto"]))
+    return validated[0]
 
 
 def _load_robots(client: httpx.Client, base_url: str) -> robotparser.RobotFileParser:
-    """Fetch and parse robots.txt; an absent or unreadable file allows all."""
+    """Fetch and parse robots.txt. Absent (404) or unreadable -> allow all
+    (per the standard: no robots.txt means no restrictions). A robots.txt
+    that explicitly disallows a path is always honored.
+
+    Deliberately NOT run through _respect_rate_limit: robots.txt is a
+    tiny, cheap request that standard crawler etiquette treats as exempt
+    from a site's own rate limit (it's the mechanism for communicating
+    that limit in the first place). Counting it against the 1 req/sec
+    budget would only delay the first real content fetch to every new
+    domain by up to a second, for no politeness benefit."""
     rp = robotparser.RobotFileParser()
     robots_url = urljoin(base_url, "/robots.txt")
     try:
-        _respect_rate_limit(urlparse(base_url).netloc)
         resp = client.get(robots_url)
         rp.parse(resp.text.splitlines() if resp.status_code == 200 else [])
     except Exception:
@@ -106,33 +277,86 @@ def _load_robots(client: httpx.Client, base_url: str) -> robotparser.RobotFilePa
     return rp
 
 
-def _fetch(client: httpx.Client, url: str) -> Optional[str]:
-    """GET a page politely; returns None on any failure instead of raising."""
+def _fetch_raise(client: httpx.Client, url: str) -> Optional[str]:
+    """GET a page. A clean HTTP response (even non-200, even non-HTML)
+    returns normally (None for anything we won't parse). A connection-
+    level failure (DNS, refused, TLS, connect timeout) propagates as
+    httpx.RequestError so the caller can decide whether to retry on a
+    different scheme."""
+    _respect_rate_limit(urlparse(url).netloc)
+    with client.stream("GET", url) as resp:
+        return _read_response(resp)
+
+
+def _fetch_safe(client: httpx.Client, url: str) -> Optional[str]:
+    """Like _fetch_raise, but never raises — used once we already know
+    the site is reachable, so one flaky secondary page can't abort the
+    whole business or trigger a needless scheme retry."""
     try:
-        _respect_rate_limit(urlparse(url).netloc)
-        resp = client.get(url)
-        if resp.status_code != 200:
-            return None
-        content_type = resp.headers.get("content-type", "")
-        if "text/html" not in content_type and content_type != "":
-            return None
-        return resp.text
+        return _fetch_raise(client, url)
     except Exception:
         return None
 
 
+def _read_response(resp: httpx.Response) -> Optional[str]:
+    if resp.status_code != 200:
+        return None
+    content_type = resp.headers.get("content-type", "")
+    if content_type and not (content_type.startswith("text/html") or content_type.startswith("text/plain")):
+        return None
+
+    chunks: list[bytes] = []
+    total = 0
+    for chunk in resp.iter_bytes():
+        chunks.append(chunk)
+        total += len(chunk)
+        if total >= MAX_RESPONSE_BYTES:
+            break
+    raw = b"".join(chunks)
+
+    # A PDF/image served without an honest Content-Type header still has
+    # null bytes or other binary markers early on; bail rather than feed
+    # garbage to BeautifulSoup/regex.
+    if b"\x00" in raw[:2048]:
+        return None
+
+    return raw.decode(resp.encoding or "utf-8", errors="replace")
+
+
+def _get_domain_lock(domain: str) -> threading.Lock:
+    with _domain_locks_guard:
+        lock = _domain_locks.get(domain)
+        if lock is None:
+            lock = threading.Lock()
+            _domain_locks[domain] = lock
+        return lock
+
+
 def _respect_rate_limit(domain: str) -> None:
-    now = time.monotonic()
-    last = _last_request_at.get(domain)
-    if last is not None:
-        elapsed = now - last
-        if elapsed < MIN_SECONDS_BETWEEN_REQUESTS_PER_DOMAIN:
-            time.sleep(MIN_SECONDS_BETWEEN_REQUESTS_PER_DOMAIN - elapsed)
-    _last_request_at[domain] = time.monotonic()
+    """Enforce >=1 second between requests to the SAME domain. Guarded by
+    a per-domain lock so concurrent requests to DIFFERENT domains never
+    wait on each other — only same-domain requests serialize."""
+    lock = _get_domain_lock(domain)
+    with lock:
+        now = time.monotonic()
+        last = _last_request_at.get(domain)
+        if last is not None:
+            elapsed = now - last
+            if elapsed < MIN_SECONDS_BETWEEN_REQUESTS_PER_DOMAIN:
+                time.sleep(MIN_SECONDS_BETWEEN_REQUESTS_PER_DOMAIN - elapsed)
+        _last_request_at[domain] = time.monotonic()
 
 
-def _find_email_in_html(html: str) -> Optional[str]:
-    """mailto: links first (highest confidence signal), then a text regex scan."""
+def _extract_candidates(html: str) -> list[tuple[str, bool]]:
+    """All plausible (email, is_mailto) pairs on a page: mailto links,
+    plain-text regex matches, obfuscated "[at]/[dot]" patterns, and
+    HTML-entity-encoded addresses (decoded up front via html.unescape).
+    Deduped, first-seen order preserved; a mailto sighting always wins
+    the is_mailto flag for that address even if it also appears in plain
+    text elsewhere on the page."""
+    html = html_module.unescape(html)
+    found: dict[str, bool] = {}
+
     try:
         soup = BeautifulSoup(html, "html.parser")
     except Exception:
@@ -144,10 +368,65 @@ def _find_email_in_html(html: str) -> Optional[str]:
             if href.lower().startswith("mailto:"):
                 addr = href.split(":", 1)[1].split("?")[0].strip()
                 if addr:
-                    return addr
+                    found[addr] = True
 
-    match = EMAIL_REGEX.search(html)
-    return match.group(0) if match else None
+    for match in EMAIL_REGEX.finditer(html):
+        addr = match.group(0)
+        found.setdefault(addr, False)
+
+    for addr in _find_obfuscated_emails(html):
+        found.setdefault(addr, False)
+
+    return list(found.items())
+
+
+def _find_obfuscated_emails(text: str) -> list[str]:
+    """"name [at] domain [dot] com" / "name(at)domain.com" style
+    de-spamification. Only bracket/paren-delimited "[at]"/"(at)" is
+    matched — an un-bracketed bare word "at" is far too common in normal
+    prose to safely treat as an obfuscation marker."""
+    results = []
+    for match in _OBFUSCATED_EMAIL_REGEX.finditer(text):
+        local, domain_chunk = match.group(1), match.group(2)
+        domain_chunk = _DOT_TOKEN_REGEX.sub(".", domain_chunk)
+        domain_chunk = re.sub(r"\s+", "", domain_chunk)
+        domain_chunk = domain_chunk.strip("[]() .")
+        candidate = f"{local}@{domain_chunk}"
+        if EMAIL_REGEX.fullmatch(candidate):
+            results.append(candidate)
+    return results
+
+
+def _discover_contact_links(html: str, base_url: str) -> list[str]:
+    """Find real contact/about links in the homepage's own navigation,
+    resolved against the CURRENT page's URL (base_url) so relative forms
+    like "/contact", "contact.html", and "../contact" all work. Stays on
+    the same site; never follows an off-domain link."""
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+    except Exception:
+        return []
+
+    base_netloc = urlparse(base_url).netloc
+    found: list[str] = []
+    seen: set[str] = set()
+
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href or href.lower().startswith(("mailto:", "tel:", "javascript:", "#")):
+            continue
+        haystack = f"{href} {a.get_text(' ', strip=True)}".lower()
+        if not any(keyword in haystack for keyword in CONTACT_LINK_KEYWORDS):
+            continue
+
+        resolved = urljoin(base_url, href)
+        if urlparse(resolved).netloc != base_netloc:
+            continue
+        if resolved not in seen:
+            seen.add(resolved)
+            found.append(resolved)
+
+    return found[:MAX_PAGES_PER_BUSINESS]
 
 
 def _validate_email(email: str, website_domain: str) -> tuple[bool, str]:
@@ -165,7 +444,7 @@ def _validate_email(email: str, website_domain: str) -> tuple[bool, str]:
         return False, ""
     if local.startswith(BLOCKED_LOCAL_PREFIXES):
         return False, ""
-    if domain in BLOCKED_DOMAINS:
+    if _domain_is_blocked(domain):
         return False, ""
 
     confidence = "high"
@@ -174,6 +453,13 @@ def _validate_email(email: str, website_domain: str) -> tuple[bool, str]:
     if site_root and email_root and site_root != email_root:
         confidence = "low"
     return True, confidence
+
+
+def _domain_is_blocked(domain: str) -> bool:
+    """Exact match OR a subdomain of a blocked platform domain — e.g.
+    'sentry-next.wixpress.com' is just as much Wix infrastructure junk as
+    'wixpress.com' itself."""
+    return any(domain == blocked or domain.endswith("." + blocked) for blocked in BLOCKED_DOMAINS)
 
 
 def _root_domain(netloc: str) -> str:
