@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LeadZap</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:wght@600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>LeadZap</h1>
+    <p class="tagline">Find local businesses. Enrich contacts. Track outreach.</p>
+  </header>
+
+  <main>
+    <section class="panel" id="search-panel">
+      <form id="search-form" class="search-row">
+        <input
+          type="text"
+          id="search-query"
+          placeholder='e.g. "HVAC companies in Hartford CT"'
+          autocomplete="off"
+          required
+        />
+        <label class="inline-label">
+          Results
+          <input type="number" id="search-count" value="20" min="1" max="60" />
+        </label>
+        <button type="submit" class="btn btn-primary" id="search-btn">Find Leads</button>
+      </form>
+      <p id="search-error" class="error-text" hidden></p>
+      <p id="search-status" class="status-text" hidden></p>
+    </section>
+
+    <section class="panel" id="filter-panel">
+      <div class="filter-row">
+        <select id="filter-status">
+          <option value="">All statuses</option>
+          <option value="new">New</option>
+          <option value="contacted">Contacted</option>
+          <option value="replied">Replied</option>
+          <option value="call_booked">Call Booked</option>
+          <option value="closed_won">Closed Won</option>
+          <option value="closed_lost">Closed Lost</option>
+          <option value="not_a_fit">Not a Fit</option>
+        </select>
+
+        <select id="filter-email">
+          <option value="">Any email status</option>
+          <option value="true">Has email</option>
+          <option value="false">No email</option>
+        </select>
+
+        <label class="toggle-label">
+          <input type="checkbox" id="filter-followup" />
+          Needs Follow-Up
+        </label>
+
+        <input type="text" id="filter-search" placeholder="Search name or address..." />
+      </div>
+    </section>
+
+    <section class="panel stats-panel">
+      <div class="stat">
+        <span class="stat-value" id="stat-total">0</span>
+        <span class="stat-label">Total Leads</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-contacted">0</span>
+        <span class="stat-label">Contacted</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-replied">0</span>
+        <span class="stat-label">Replied</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-call_booked">0</span>
+        <span class="stat-label">Calls Booked</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-closed_won">0</span>
+        <span class="stat-label">Closed Won</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-emails_found">0</span>
+        <span class="stat-label">Emails Found</span>
+      </div>
+    </section>
+
+    <section class="panel actions-panel">
+      <button type="button" class="btn btn-secondary" id="enrich-selected-btn">Enrich Selected</button>
+      <button type="button" class="btn btn-secondary" id="enrich-missing-btn">Enrich All Missing</button>
+      <button type="button" class="btn btn-secondary" id="export-btn">Export CSV</button>
+      <span id="enrich-progress" class="status-text" hidden></span>
+    </section>
+
+    <section class="panel table-panel">
+      <table id="leads-table">
+        <thead>
+          <tr>
+            <th class="col-check"><input type="checkbox" id="select-all" /></th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Email</th>
+            <th>Website</th>
+            <th>Status</th>
+            <th>Follow-Up</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="leads-tbody">
+          <tr class="empty-row"><td colspan="8">No leads yet. Run a search above.</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
