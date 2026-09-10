@@ -284,7 +284,9 @@ searchForm.addEventListener("submit", async (e) => {
     if (!res.ok) {
       throw new Error(data.detail || "Search failed.");
     }
-    searchStatus.textContent = `Found ${data.total_found} results — added ${data.added} new lead(s), skipped ${data.skipped} duplicate(s).`;
+    searchStatus.textContent =
+      `Found ${data.total_found} result(s) — ${data.inserted} new, ` +
+      `${data.updated} refreshed, ${data.skipped} skipped.`;
     searchStatus.hidden = false;
     refreshAll();
   } catch (err) {

@@ -79,12 +79,22 @@ def search_leads(payload: SearchRequest) -> dict[str, Any]:
     except places.PlacesAPIError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    added = 0
+    inserted = updated = skipped = 0
     for place in found:
-        if db.insert_lead(place, query):
-            added += 1
+        outcome = db.upsert_lead(place, query)
+        if outcome == "inserted":
+            inserted += 1
+        elif outcome == "updated":
+            updated += 1
+        else:
+            skipped += 1
 
-    return {"total_found": len(found), "added": added, "skipped": len(found) - added}
+    return {
+        "total_found": len(found),
+        "inserted": inserted,
+        "updated": updated,
+        "skipped": skipped,
+    }
 
 
 # ---------------------------------------------------------------------------

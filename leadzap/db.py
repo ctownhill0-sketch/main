@@ -35,14 +35,25 @@ CREATE TABLE IF NOT EXISTS leads (
     date_added          TEXT,
     date_contacted       TEXT,
     followup_date       TEXT,
+    date_last_refreshed TEXT,
     raw_json            TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_leads_followup_date ON leads(followup_date);
 """
 
+# Columns added after a database may already exist on disk. Checked against
+# PRAGMA table_info on every startup and added with ALTER TABLE if missing,
+# so upgrading LeadZap never requires dropping (or migrating by hand) an
+# existing leads.db. Add future new columns here, never by editing SCHEMA
+# alone — SCHEMA's CREATE TABLE only runs for a brand-new database.
+SCHEMA_MIGRATIONS: dict[str, str] = {
+    "date_last_refreshed": "ALTER TABLE leads ADD COLUMN date_last_refreshed TEXT",
+}
+
 # Columns a caller may update via update_lead(). Kept explicit as an
-# allowlist so a bad key can never be interpolated into SQL.
+# allowlist so a bad key can never be interpolated into SQL. Deliberately
+# excludes date_last_refreshed, which only upsert_lead() should touch.
 UPDATABLE_COLUMNS = {
     "name", "address", "phone", "website", "rating", "review_count",
     "email", "email_source_url", "email_confidence", "enrichment_status",
@@ -62,48 +73,90 @@ def get_conn() -> Iterator[sqlite3.Connection]:
 
 
 def init_db() -> None:
-    """Create the leads table and indexes if they don't already exist."""
+    """Create the leads table and indexes if missing, then apply any
+    pending column migrations. Safe to call on every startup — never
+    drops or rewrites existing data."""
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        existing_columns = {row["name"] for row in conn.execute("PRAGMA table_info(leads)")}
+        for column, ddl in SCHEMA_MIGRATIONS.items():
+            if column not in existing_columns:
+                conn.execute(ddl)
 
 
-def insert_lead(place: dict[str, Any], search_query: str) -> bool:
-    """Insert one Places API result as a lead.
+def upsert_lead(place: dict[str, Any], search_query: str) -> str:
+    """Insert a new lead from a Places API result, or refresh an existing
+    one's business-sourced fields if it was already saved (matched by
+    place_id).
 
-    Skips (returns False) businesses missing an id, businesses that are
-    not OPERATIONAL, and duplicates already present by place_id.
-    Returns True only when a new row was inserted.
+    On a re-search hit, ONLY business-sourced fields are touched: name,
+    address, phone, website, rating, review_count, raw_json, plus
+    date_last_refreshed. Pipeline fields — status, notes, date_contacted,
+    followup_date, enrichment_status, email, email_confidence,
+    email_source_url, search_query (the query that *first* found it),
+    date_added — are never modified on an existing row. This is the one
+    guarantee re-running a search must never break.
+
+    Returns "inserted", "updated", or "skipped" (missing id, or the
+    business is not OPERATIONAL).
     """
     place_id = place.get("id")
     if not place_id:
-        return False
+        return "skipped"
     if place.get("businessStatus") != "OPERATIONAL":
-        return False
+        return "skipped"
 
     display_name = (place.get("displayName") or {}).get("text", "") or "Unnamed business"
     website = place.get("websiteUri")
+    today = date.today().isoformat()
 
     with get_conn() as conn:
-        cur = conn.execute(
-            """INSERT OR IGNORE INTO leads
-               (place_id, name, address, phone, website, rating, review_count,
-                enrichment_status, status, search_query, date_added, raw_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)""",
+        existing = conn.execute(
+            "SELECT id FROM leads WHERE place_id = ?", (place_id,)
+        ).fetchone()
+
+        if existing is None:
+            conn.execute(
+                """INSERT INTO leads
+                   (place_id, name, address, phone, website, rating, review_count,
+                    enrichment_status, status, search_query, date_added,
+                    date_last_refreshed, raw_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?)""",
+                (
+                    place_id,
+                    display_name,
+                    place.get("formattedAddress"),
+                    place.get("nationalPhoneNumber"),
+                    website,
+                    place.get("rating"),
+                    place.get("userRatingCount"),
+                    "no_website" if not website else "pending",
+                    search_query,
+                    today,
+                    today,
+                    json.dumps(place),
+                ),
+            )
+            return "inserted"
+
+        conn.execute(
+            """UPDATE leads
+               SET name = ?, address = ?, phone = ?, website = ?,
+                   rating = ?, review_count = ?, date_last_refreshed = ?, raw_json = ?
+               WHERE place_id = ?""",
             (
-                place_id,
                 display_name,
                 place.get("formattedAddress"),
                 place.get("nationalPhoneNumber"),
                 website,
                 place.get("rating"),
                 place.get("userRatingCount"),
-                "no_website" if not website else "pending",
-                search_query,
-                date.today().isoformat(),
+                today,
                 json.dumps(place),
+                place_id,
             ),
         )
-        return cur.rowcount > 0
+        return "updated"
 
 
 def get_lead(lead_id: int) -> Optional[dict[str, Any]]:
