@@ -112,7 +112,7 @@ def upsert_lead(place: dict[str, Any], search_query: str) -> str:
 
     with get_conn() as conn:
         existing = conn.execute(
-            "SELECT id FROM leads WHERE place_id = ?", (place_id,)
+            "SELECT id, website FROM leads WHERE place_id = ?", (place_id,)
         ).fetchone()
 
         if existing is None:
@@ -139,23 +139,38 @@ def upsert_lead(place: dict[str, Any], search_query: str) -> str:
             )
             return "inserted"
 
-        conn.execute(
-            """UPDATE leads
-               SET name = ?, address = ?, phone = ?, website = ?,
-                   rating = ?, review_count = ?, date_last_refreshed = ?, raw_json = ?
-               WHERE place_id = ?""",
-            (
-                display_name,
-                place.get("formattedAddress"),
-                place.get("nationalPhoneNumber"),
-                website,
-                place.get("rating"),
-                place.get("userRatingCount"),
-                today,
-                json.dumps(place),
-                place_id,
-            ),
+        # A website that appeared, disappeared, or moved to a different URL
+        # makes any prior enrichment verdict stale — 'found', 'not_found',
+        # and 'failed' are all just as stranded as 'no_website' would be.
+        # Reset to 'pending' (or back to 'no_website' if the site vanished)
+        # so "Enrich All Missing" picks it back up. The existing email,
+        # email_source_url, and email_confidence are deliberately left
+        # alone: a stale email beats an empty one until enrichment actually
+        # replaces it. An unchanged website never touches enrichment_status.
+        old_website = existing["website"] or None
+        new_website = website or None
+
+        fields_sql = (
+            "name = ?, address = ?, phone = ?, website = ?, "
+            "rating = ?, review_count = ?, date_last_refreshed = ?, raw_json = ?"
         )
+        params: list[Any] = [
+            display_name,
+            place.get("formattedAddress"),
+            place.get("nationalPhoneNumber"),
+            website,
+            place.get("rating"),
+            place.get("userRatingCount"),
+            today,
+            json.dumps(place),
+        ]
+
+        if new_website != old_website:
+            fields_sql += ", enrichment_status = ?"
+            params.append("pending" if new_website else "no_website")
+
+        params.append(place_id)
+        conn.execute(f"UPDATE leads SET {fields_sql} WHERE place_id = ?", params)
         return "updated"
 
 
