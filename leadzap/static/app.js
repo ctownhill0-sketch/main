@@ -79,12 +79,29 @@ function refreshAll() {
 // Table rendering
 // ---------------------------------------------------------------------------
 
+// Statuses a lead can still meaningfully be followed up on -- mirrors
+// db.FOLLOWUP_ACTIVE_STATUSES. Terminal statuses (closed_won/
+// closed_lost/not_a_fit) are excluded from highlighting, but their
+// followup_date is never cleared -- reopening a lead makes it relevant again.
+const FOLLOWUP_ACTIVE_STATUSES = ["new", "contacted", "replied", "call_booked"];
+
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  // Local calendar date, not toISOString() (which is UTC) -- this must
+  // match the backend's date.today() (also local time) or a lead near
+  // midnight could show as overdue here but not server-side, or vice versa.
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function needsFollowup(lead) {
-  return lead.status === "contacted" && lead.followup_date && lead.followup_date <= todayISO();
+  return (
+    FOLLOWUP_ACTIVE_STATUSES.includes(lead.status) &&
+    lead.followup_date &&
+    lead.followup_date <= todayISO()
+  );
 }
 
 function emailCell(lead) {

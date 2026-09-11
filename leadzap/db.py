@@ -203,6 +203,13 @@ def count_other_leads_with_email(email: str, exclude_lead_id: int) -> int:
         return row["c"]
 
 
+# Statuses a lead can still meaningfully be followed up on. Terminal
+# statuses (closed_won/closed_lost/not_a_fit) are excluded from the
+# Needs Follow-Up filter, but their followup_date is never cleared when
+# they get there — reopening a lead makes the old date relevant again.
+FOLLOWUP_ACTIVE_STATUSES = ("new", "contacted", "replied", "call_booked")
+
+
 def get_leads(
     status: Optional[str] = None,
     has_email: Optional[bool] = None,
@@ -223,10 +230,21 @@ def get_leads(
         query += " AND (email IS NULL OR email = '')"
 
     if needs_followup:
+        # Comparing the column directly against a precomputed value (not
+        # wrapping the column in date(...)) lets SQLite use
+        # idx_leads_followup_date as a real range scan instead of
+        # evaluating an expression per row. date.today() (Python, local
+        # time) rather than SQLite's date('now') (UTC) also keeps "today"
+        # consistent with every other date computed in this app —
+        # PATCH's date_contacted/followup_date and the frontend's own
+        # "today" all use local time too.
+        placeholders = ", ".join("?" for _ in FOLLOWUP_ACTIVE_STATUSES)
         query += (
-            " AND status = 'contacted' AND followup_date IS NOT NULL"
-            " AND followup_date != '' AND date(followup_date) <= date('now')"
+            f" AND status IN ({placeholders}) AND followup_date IS NOT NULL"
+            " AND followup_date != '' AND followup_date <= ?"
         )
+        params.extend(FOLLOWUP_ACTIVE_STATUSES)
+        params.append(date.today().isoformat())
 
     if q:
         query += " AND (name LIKE ? OR address LIKE ?)"
