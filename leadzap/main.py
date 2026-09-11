@@ -51,6 +51,36 @@ _progress_lock = threading.Lock()
 # number — see enrich._respect_rate_limit.
 ENRICH_CONCURRENCY = 5
 
+# Hard wall-clock cap on a single lead's enrichment, independent of *why*
+# it's slow. enrich.py's regex-backtracking fix addresses the one known
+# cause of an effectively-unbounded hang, but the actual guarantee wanted
+# here is "no single lead can occupy a worker indefinitely, whatever the
+# cause" -- belt and suspenders. 30s covers the normal worst case (4
+# pages x up to ~10s httpx timeout each, plus rate-limit waits) with some
+# margin, while still bounding a genuine hang.
+ENRICH_PER_LEAD_TIMEOUT_SECONDS = 30
+
+# A separate, dedicated pool just for enforcing that per-lead timeout.
+# concurrent.futures cannot forcibly kill a running thread -- calling
+# future.result(timeout=...) only stops WAITING on it; the underlying
+# call keeps running to completion (or forever) on its own. Sizing this
+# larger than ENRICH_CONCURRENCY means a stuck call doesn't prevent the
+# next lead's guarded call from getting its own worker; the cost, in the
+# pathological case of many simultaneous true hangs, is this pool's own
+# thread count growing rather than being strictly bounded -- an
+# acceptable trade for a cap that should essentially never fire.
+_timeout_guard_pool = concurrent.futures.ThreadPoolExecutor(
+    max_workers=ENRICH_CONCURRENCY * 4, thread_name_prefix="enrich-guard"
+)
+
+
+def _enrich_with_timeout(website: Optional[str]) -> enrich.Enrichment:
+    future = _timeout_guard_pool.submit(enrich.enrich_lead, website)
+    try:
+        return future.result(timeout=ENRICH_PER_LEAD_TIMEOUT_SECONDS)
+    except concurrent.futures.TimeoutError:
+        return enrich.Enrichment(status="failed")
+
 
 @app.on_event("startup")
 def on_startup() -> None:
@@ -184,7 +214,7 @@ def _enrich_one(lead_id: int) -> None:
         with _progress_lock:
             enrichment_progress["current_name"] = lead["name"]
 
-        result = enrich.enrich_lead(lead.get("website"))
+        result = _enrich_with_timeout(lead.get("website"))
 
         confidence = result.confidence
         if result.status == "found" and result.email:
