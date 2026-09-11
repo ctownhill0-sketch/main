@@ -52,11 +52,27 @@ function currentFilters() {
   return params;
 }
 
+let loadLeadsSeq = 0;
+
 async function loadLeads() {
+  // Guard against an out-of-order response: if a NEWER loadLeads() call
+  // has already started (or finished) by the time this one's fetch
+  // resolves, discard this one rather than let a stale response
+  // clobber fresher state that's already on screen.
+  const mySeq = ++loadLeadsSeq;
   const params = currentFilters();
   const res = await fetch(`/api/leads?${params.toString()}`);
-  state.leads = res.ok ? await res.json() : [];
-  state.selectedIds.clear();
+  const data = res.ok ? await res.json() : [];
+  if (mySeq !== loadLeadsSeq) return;
+
+  state.leads = data;
+  // Drop selections only for leads no longer in the current filtered
+  // view (e.g. filtered out) -- an unrelated edit or an enrichment batch
+  // completing shouldn't silently clear a selection you're mid-workflow on.
+  const currentIds = new Set(data.map((l) => l.id));
+  for (const id of Array.from(state.selectedIds)) {
+    if (!currentIds.has(id)) state.selectedIds.delete(id);
+  }
   renderTable();
 }
 
@@ -133,10 +149,23 @@ function statusSelect(lead) {
         .replace(/_/g, " ")
         .replace(/\b\w/g, (c) => c.toUpperCase())}</option>`
   ).join("");
-  return `<select class="status-select status-${lead.status}" data-id="${lead.id}" data-field="status">${options}</select>`;
+  return `<select class="status-select status-${lead.status}" data-id="${lead.id}" data-field="status" data-previous-value="${lead.status}">${options}</select>`;
 }
 
 function renderTable() {
+  // A notes editor the user has open (and possibly mid-typing, unsaved)
+  // must survive a refresh -- rebuilding the row from scratch would
+  // destroy the textarea, and relying on the resulting native blur
+  // event to save it is NOT reliable: that save races the very fetch
+  // that's about to render this row from (now-stale) server data, and
+  // can leave the on-screen preview showing blank/old text even though
+  // the save actually landed in the DB. Capture open editors' current
+  // (possibly unsaved) values now, and restore them after rebuilding.
+  const openEditors = {};
+  document.querySelectorAll(".notes-textarea").forEach((ta) => {
+    openEditors[ta.dataset.id] = ta.value;
+  });
+
   if (state.leads.length === 0) {
     tbody.innerHTML = `<tr class="empty-row"><td colspan="8">No leads match the current filters.</td></tr>`;
     selectAllCheckbox.checked = false;
@@ -146,10 +175,12 @@ function renderTable() {
   tbody.innerHTML = state.leads
     .map((lead) => {
       const rowClass = needsFollowup(lead) ? "needs-followup" : "";
-      const website = lead.website
+      const website = isHttpUrl(lead.website)
         ? `<a class="website-link" href="${escapeAttr(lead.website)}" target="_blank" rel="noopener">${escapeHtml(
             shortenUrl(lead.website)
           )}</a>`
+        : lead.website
+        ? `<span class="badge badge-muted" title="${escapeAttr(lead.website)}">invalid URL</span>`
         : `<span class="badge badge-muted">none</span>`;
 
       return `
@@ -165,9 +196,9 @@ function renderTable() {
           <td>${emailCell(lead)}</td>
           <td>${website}</td>
           <td>${statusSelect(lead)}</td>
-          <td><input type="date" class="followup-input" data-id="${lead.id}" data-field="followup_date" value="${
+          <td><input type="date" class="followup-input" data-id="${lead.id}" data-field="followup_date" data-previous-value="${
         lead.followup_date || ""
-      }" /></td>
+      }" value="${lead.followup_date || ""}" /></td>
           <td class="notes-cell">${renderNotesCell(lead)}</td>
         </tr>`;
     })
@@ -175,12 +206,37 @@ function renderTable() {
 
   attachRowHandlers();
   updateSelectAllState();
+
+  // Re-open any editor that was open before this refresh, restoring
+  // whatever the user had typed -- which may be ahead of the freshly
+  // loaded server value if they hadn't saved yet.
+  Object.entries(openEditors).forEach(([id, value]) => {
+    const previewDiv = tbody.querySelector(`.notes-preview[data-id="${id}"]`);
+    if (previewDiv) {
+      openNotesEditor(previewDiv, value);
+    }
+  });
 }
 
 function renderNotesCell(lead) {
   const escaped = escapeHtml(lead.notes || "");
   const empty = !lead.notes;
   return `<div class="notes-preview ${empty ? "empty" : ""}" data-id="${lead.id}">${empty ? "" : escaped}</div>`;
+}
+
+function isHttpUrl(url) {
+  // Website is stored from Google's own websiteUri and is never
+  // user-editable, so this should always be true in practice -- but
+  // rendering it as a clickable href without checking the scheme would
+  // let a javascript:/data: URL execute on click if that assumption
+  // ever breaks. Only http(s) gets a real link.
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function shortenUrl(url) {
@@ -214,16 +270,38 @@ function attachRowHandlers() {
   document.querySelectorAll(".status-select").forEach((sel) => {
     sel.addEventListener("change", async (e) => {
       const id = Number(e.target.dataset.id);
-      await patchLead(id, { status: e.target.value });
-      refreshAll();
+      const previousValue = e.target.dataset.previousValue ?? e.target.value;
+      const newValue = e.target.value;
+      e.target.disabled = true; // prevent a second overlapping change while this one saves
+      try {
+        await patchLead(id, { status: newValue });
+        e.target.dataset.previousValue = newValue;
+        refreshAll();
+      } catch (err) {
+        e.target.value = previousValue; // the save failed -- don't leave the UI showing an unsaved value
+        showSaveError(`Couldn't save status change: ${err.message}`);
+      } finally {
+        e.target.disabled = false;
+      }
     });
   });
 
   document.querySelectorAll('.followup-input').forEach((input) => {
     input.addEventListener("change", async (e) => {
       const id = Number(e.target.dataset.id);
-      await patchLead(id, { followup_date: e.target.value });
-      refreshAll();
+      const previousValue = e.target.dataset.previousValue ?? "";
+      const newValue = e.target.value;
+      e.target.disabled = true;
+      try {
+        await patchLead(id, { followup_date: newValue });
+        e.target.dataset.previousValue = newValue;
+        refreshAll();
+      } catch (err) {
+        e.target.value = previousValue;
+        showSaveError(`Couldn't save follow-up date: ${err.message}`);
+      } finally {
+        e.target.disabled = false;
+      }
     });
   });
 
@@ -232,35 +310,76 @@ function attachRowHandlers() {
   });
 }
 
-function openNotesEditor(previewDiv) {
+function openNotesEditor(previewDiv, overrideValue) {
   const id = Number(previewDiv.dataset.id);
   const lead = state.leads.find((l) => l.id === id);
   const textarea = document.createElement("textarea");
   textarea.className = "notes-textarea";
-  textarea.value = lead ? lead.notes || "" : "";
+  textarea.dataset.id = String(id);
+  textarea.value = overrideValue !== undefined ? overrideValue : lead ? lead.notes || "" : "";
   previewDiv.replaceWith(textarea);
   textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
 
-  const save = async () => {
-    await patchLead(id, { notes: textarea.value });
-    if (lead) lead.notes = textarea.value;
+  const closeToPreview = (value) => {
     const newPreview = document.createElement("div");
-    newPreview.className = `notes-preview ${textarea.value ? "" : "empty"}`;
+    newPreview.className = `notes-preview ${value ? "" : "empty"}`;
     newPreview.dataset.id = String(id);
-    newPreview.textContent = textarea.value;
+    newPreview.textContent = value;
     newPreview.addEventListener("click", () => openNotesEditor(newPreview));
     textarea.replaceWith(newPreview);
+  };
+
+  const save = async () => {
+    const value = textarea.value;
+    try {
+      await patchLead(id, { notes: value });
+      if (lead) lead.notes = value;
+      closeToPreview(value);
+    } catch (err) {
+      // Leave the textarea OPEN with the user's text intact -- closing
+      // it to a preview here would show whatever the last-known value
+      // was, silently discarding an edit that never actually saved.
+      showSaveError(`Couldn't save note: ${err.message}. Your text is still here -- try again.`);
+    }
   };
 
   textarea.addEventListener("blur", save);
 }
 
 async function patchLead(id, fields) {
-  await fetch(`/api/leads/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(fields),
-  });
+  let res;
+  try {
+    res = await fetch(`/api/leads/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+  } catch (err) {
+    throw new Error("network error");
+  }
+  if (!res.ok) {
+    let detail = `server error (${res.status})`;
+    try {
+      const body = await res.json();
+      detail = body.detail || detail;
+    } catch {
+      // response wasn't JSON -- keep the generic detail above
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+let saveErrorTimer = null;
+function showSaveError(message) {
+  const toast = el("save-error-toast");
+  toast.textContent = message;
+  toast.hidden = false;
+  clearTimeout(saveErrorTimer);
+  saveErrorTimer = setTimeout(() => {
+    toast.hidden = true;
+  }, 6000);
 }
 
 function updateSelectAllState() {

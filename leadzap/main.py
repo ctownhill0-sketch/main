@@ -303,6 +303,7 @@ EXPORT_COLUMNS = [
     "name", "phone", "email", "website", "address", "status",
     "notes", "date_contacted", "followup_date",
 ]
+UTF8_BOM = "\ufeff"
 
 
 @app.get("/api/export/csv")
@@ -321,8 +322,15 @@ def export_csv(
         writer.writerow([lead.get(col) or "" for col in EXPORT_COLUMNS])
     buffer.seek(0)
 
+    # Excel's "double-click to open" CSV import assumes the system's
+    # ANSI codepage without a BOM, mangling any non-ASCII character
+    # (accented business names, etc.) -- the UTF-8 BOM tells it to read
+    # as UTF-8 instead. Google Sheets and Python's csv module both parse
+    # correctly with or without it, so this is pure upside.
+    content = UTF8_BOM + buffer.getvalue()
+
     return StreamingResponse(
-        iter([buffer.getvalue()]),
+        iter([content]),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=leadzap_export.csv"},
     )
