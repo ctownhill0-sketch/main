@@ -9,8 +9,9 @@ import csv
 import io
 import os
 import threading
+from contextlib import asynccontextmanager
 from datetime import date, timedelta
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException
@@ -28,7 +29,14 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(APP_DIR, "static")
 DEFAULT_FOLLOWUP_DAYS = 3
 
-app = FastAPI(title="LeadZap")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    db.init_db()
+    yield
+
+
+app = FastAPI(title="LeadZap", lifespan=lifespan)
 
 # In-memory state for the currently running (if any) enrichment batch.
 # A single-user local tool only ever has one job running at a time, so a
@@ -80,11 +88,6 @@ def _enrich_with_timeout(website: Optional[str]) -> enrich.Enrichment:
         return future.result(timeout=ENRICH_PER_LEAD_TIMEOUT_SECONDS)
     except concurrent.futures.TimeoutError:
         return enrich.Enrichment(status="failed")
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    db.init_db()
 
 
 # ---------------------------------------------------------------------------
