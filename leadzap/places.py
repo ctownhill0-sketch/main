@@ -6,6 +6,7 @@ https://developers.google.com/maps/documentation/places/web-service/text-search
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import httpx
@@ -96,10 +97,22 @@ _REASON_MESSAGES: dict[str, str] = {
 
 class PlacesAPIError(Exception):
     """Raised for any failure to complete a Places API search, with the
-    real error message surfaced (API error body, network error, etc.)."""
+    real error message surfaced (API error body, network error, etc.).
+    Carries requests_made so a caller can still record billing usage for
+    a search that made one or more real HTTP calls before failing."""
+
+    def __init__(self, message: str, requests_made: int = 0):
+        super().__init__(message)
+        self.requests_made = requests_made
 
 
-def search_text(query: str, api_key: str, max_results: int = 20) -> list[dict[str, Any]]:
+@dataclass
+class SearchOutcome:
+    places: list[dict[str, Any]]
+    requests_made: int  # actual HTTP calls made to Google, including retries
+
+
+def search_text(query: str, api_key: str, max_results: int = 20) -> SearchOutcome:
     """Search Google Places (New) for businesses matching a free-text query.
 
     Pages automatically (via nextPageToken) until `max_results` places have
@@ -121,51 +134,65 @@ def search_text(query: str, api_key: str, max_results: int = 20) -> list[dict[st
     results: list[dict[str, Any]] = []
     page_token: Optional[str] = None
     pages_fetched = 0
+    request_counter = [0]  # mutable so _post_with_retry can tally every real HTTP call, incl. retries
 
-    with httpx.Client(timeout=15.0) as client:
-        while len(results) < max_results and pages_fetched < MAX_PAGES:
-            body: dict[str, Any] = {
-                "textQuery": query,
-                "pageSize": min(MAX_PAGE_SIZE, max_results - len(results)),
-            }
-            is_paginated = page_token is not None
-            if page_token:
-                body["pageToken"] = page_token
-                time.sleep(PAGE_TOKEN_DELAY_SECONDS)
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            while len(results) < max_results and pages_fetched < MAX_PAGES:
+                body: dict[str, Any] = {
+                    "textQuery": query,
+                    "pageSize": min(MAX_PAGE_SIZE, max_results - len(results)),
+                }
+                is_paginated = page_token is not None
+                if page_token:
+                    body["pageToken"] = page_token
+                    time.sleep(PAGE_TOKEN_DELAY_SECONDS)
 
-            response = _post_with_retry(client, headers, body, is_paginated)
-            pages_fetched += 1
+                response = _post_with_retry(client, headers, body, is_paginated, request_counter)
+                pages_fetched += 1
 
-            data = response.json()
-            places = data.get("places", [])
-            results.extend(places)
+                data = response.json()
+                places = data.get("places", [])
+                results.extend(places)
 
-            page_token = data.get("nextPageToken")
-            if not page_token or not places:
-                break
+                page_token = data.get("nextPageToken")
+                if not page_token or not places:
+                    break
+    except PlacesAPIError as exc:
+        exc.requests_made = request_counter[0]
+        raise
 
-    return results[:max_results]
+    return SearchOutcome(places=results[:max_results], requests_made=request_counter[0])
 
 
 def _post_with_retry(
-    client: httpx.Client, headers: dict[str, str], body: dict[str, Any], is_paginated: bool
+    client: httpx.Client,
+    headers: dict[str, str],
+    body: dict[str, Any],
+    is_paginated: bool,
+    request_counter: list[int],
 ) -> httpx.Response:
     """POST to the search endpoint, retrying a transient-looking failure on
     a paginated request (a freshly-issued nextPageToken not yet being
     active). The first page never retries a 400/429 — there, it's a real
     config or quota problem, not a timing issue, and should surface at once.
-    """
+    request_counter[0] is incremented for every actual HTTP call attempted
+    (success, error response, or network failure) so usage tracking stays
+    accurate even for a search that ultimately fails."""
     retry_delays = PAGE_TOKEN_RETRY_DELAYS if is_paginated else []
     attempt = 0
 
     while True:
         try:
             response = client.post(SEARCH_URL, headers=headers, json=body)
+            request_counter[0] += 1
         except httpx.TimeoutException as exc:
+            request_counter[0] += 1
             raise PlacesAPIError(
                 "Request to Google Places API timed out. Check your internet connection and try again."
             ) from exc
         except httpx.RequestError as exc:
+            request_counter[0] += 1
             raise PlacesAPIError(f"Could not reach Google Places API: {exc}") from exc
 
         if response.status_code == 200:

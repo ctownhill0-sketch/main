@@ -35,9 +35,15 @@
           <input type="number" id="search-count" value="20" min="1" max="60" />
         </label>
         <button type="submit" class="btn btn-primary" id="search-btn">Find Leads</button>
+        <span id="request-estimate" class="request-estimate"></span>
       </form>
       <p id="search-error" class="error-text" hidden></p>
       <p id="search-status" class="status-text" hidden></p>
+      <p id="usage-warning" class="usage-warning" hidden>
+        <span id="usage-warning-text"></span>
+        <button type="button" id="usage-warning-dismiss" class="btn-link">Dismiss</button>
+      </p>
+      <p id="usage-counter" class="status-text usage-counter"></p>
     </section>
 
     <section class="panel" id="filter-panel">

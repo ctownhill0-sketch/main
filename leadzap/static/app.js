@@ -23,6 +23,11 @@ const searchCountInput = el("search-count");
 const searchBtn = el("search-btn");
 const searchError = el("search-error");
 const searchStatus = el("search-status");
+const requestEstimateEl = el("request-estimate");
+const usageCounterEl = el("usage-counter");
+const usageWarningEl = el("usage-warning");
+const usageWarningTextEl = el("usage-warning-text");
+const usageWarningDismissBtn = el("usage-warning-dismiss");
 
 const filterStatus = el("filter-status");
 const filterEmail = el("filter-email");
@@ -400,6 +405,16 @@ selectAllCheckbox.addEventListener("change", (e) => {
 // Search
 // ---------------------------------------------------------------------------
 
+const PLACES_PAGE_SIZE = 20; // mirrors places.MAX_PAGE_SIZE
+
+function updateRequestEstimate() {
+  const maxResults = Math.max(1, Math.min(60, Number(searchCountInput.value) || 20));
+  const requests = Math.ceil(maxResults / PLACES_PAGE_SIZE);
+  requestEstimateEl.textContent = `~${requests} Places API request${requests === 1 ? "" : "s"}`;
+}
+
+searchCountInput.addEventListener("input", updateRequestEstimate);
+
 searchForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   searchError.hidden = true;
@@ -422,16 +437,43 @@ searchForm.addEventListener("submit", async (e) => {
     }
     searchStatus.textContent =
       `Found ${data.total_found} result(s) — ${data.inserted} new, ` +
-      `${data.updated} refreshed, ${data.skipped} skipped.`;
+      `${data.updated} refreshed, ${data.skipped} skipped. ` +
+      `(${data.requests_made} Places API request${data.requests_made === 1 ? "" : "s"} used)`;
     searchStatus.hidden = false;
     refreshAll();
+    refreshUsage();
   } catch (err) {
     searchError.textContent = err.message;
     searchError.hidden = false;
+    refreshUsage(); // a failed search can still have made (and used up) real API calls
   } finally {
     searchBtn.disabled = false;
     searchBtn.textContent = "Find Leads";
   }
+});
+
+// ---------------------------------------------------------------------------
+// API usage tracking
+// ---------------------------------------------------------------------------
+
+async function refreshUsage() {
+  const res = await fetch("/api/usage");
+  if (!res.ok) return;
+  const usage = await res.json();
+
+  usageCounterEl.textContent = `${usage.places_api_request_count} Places API request(s) made this session`;
+
+  if (usage.should_warn) {
+    usageWarningTextEl.textContent =
+      `Heads up: you've made ${usage.places_api_request_count} Places API requests ` +
+      `(soft cap: ${usage.warn_threshold}). This isn't a hard limit -- just a nudge to check your usage.`;
+    usageWarningEl.hidden = false;
+  }
+}
+
+usageWarningDismissBtn.addEventListener("click", async () => {
+  usageWarningEl.hidden = true;
+  await fetch("/api/usage/acknowledge-warning", { method: "POST" });
 });
 
 // ---------------------------------------------------------------------------
@@ -524,6 +566,8 @@ exportBtn.addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 
 refreshAll();
+updateRequestEstimate();
+refreshUsage();
 
 // Resume polling if a job was already running when the page loaded/reloaded.
 (async function checkInFlightJob() {

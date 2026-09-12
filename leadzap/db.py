@@ -40,7 +40,18 @@ CREATE TABLE IF NOT EXISTS leads (
 );
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_leads_followup_date ON leads(followup_date);
+
+-- Small key/value store for app-wide counters (currently: cumulative
+-- Places API requests made) that don't belong on any one lead. A
+-- separate table rather than a new leads column, so it needs no
+-- migration and can never collide with per-lead data.
+CREATE TABLE IF NOT EXISTS app_meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
+
+PLACES_REQUEST_COUNT_KEY = "places_api_request_count"
 
 # Columns added after a database may already exist on disk. Checked against
 # PRAGMA table_info on every startup and added with ALTER TABLE if missing,
@@ -277,6 +288,47 @@ def update_lead(lead_id: int, **fields: Any) -> None:
     values = list(fields.values()) + [lead_id]
     with get_conn() as conn:
         conn.execute(f"UPDATE leads SET {columns} WHERE id = ?", values)
+
+
+def increment_places_request_count(by: int) -> int:
+    """Add `by` to the persisted cumulative Places API request counter
+    and return the new total. Counts every actual HTTP call this app has
+    made to Google (including retries and failed attempts) so it stays a
+    trustworthy sanity check against Google Cloud's own billing console,
+    even for searches that errored partway through."""
+    if by <= 0:
+        return get_places_request_count()
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO app_meta (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + ? AS TEXT)",
+            (PLACES_REQUEST_COUNT_KEY, str(by), by),
+        )
+        row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (PLACES_REQUEST_COUNT_KEY,)).fetchone()
+        return int(row["value"])
+
+
+def get_places_request_count() -> int:
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (PLACES_REQUEST_COUNT_KEY,)).fetchone()
+        return int(row["value"]) if row else 0
+
+
+_LAST_WARNED_KEY = "places_api_last_warned_at"
+
+
+def get_last_warned_request_count() -> int:
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (_LAST_WARNED_KEY,)).fetchone()
+        return int(row["value"]) if row else 0
+
+
+def set_last_warned_request_count(count: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
+            (_LAST_WARNED_KEY, str(count), str(count)),
+        )
 
 
 def get_stats() -> dict[str, int]:

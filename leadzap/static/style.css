@@ -141,6 +141,44 @@ button:focus {
   cursor: not-allowed;
 }
 
+.request-estimate {
+  color: var(--slate);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.usage-counter {
+  color: var(--slate);
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+
+.usage-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #6b4a1c;
+  font-size: 13px;
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  background: #fbf1de;
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  white-space: nowrap;
+}
+
 .save-error-toast {
   position: fixed;
   top: 16px;

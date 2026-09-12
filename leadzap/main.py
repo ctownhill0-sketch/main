@@ -118,26 +118,69 @@ def search_leads(payload: SearchRequest) -> dict[str, Any]:
     api_key = os.environ.get("GOOGLE_PLACES_API_KEY", "")
 
     try:
-        found = places.search_text(query, api_key, max_results)
+        outcome = places.search_text(query, api_key, max_results)
     except places.PlacesAPIError as exc:
+        # A search can fail after already making one or more real,
+        # possibly-billed API calls (e.g. page 1 ok, page 2 errors) --
+        # record those before surfacing the failure, so the persisted
+        # counter never under-counts actual usage.
+        if exc.requests_made:
+            db.increment_places_request_count(exc.requests_made)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    db.increment_places_request_count(outcome.requests_made)
+
     inserted = updated = skipped = 0
-    for place in found:
-        outcome = db.upsert_lead(place, query)
-        if outcome == "inserted":
+    for place in outcome.places:
+        result = db.upsert_lead(place, query)
+        if result == "inserted":
             inserted += 1
-        elif outcome == "updated":
+        elif result == "updated":
             updated += 1
         else:
             skipped += 1
 
     return {
-        "total_found": len(found),
+        "total_found": len(outcome.places),
         "inserted": inserted,
         "updated": updated,
         "skipped": skipped,
+        "requests_made": outcome.requests_made,
     }
+
+
+# ---------------------------------------------------------------------------
+# API usage tracking (Places API request counter + soft-cap warning)
+# ---------------------------------------------------------------------------
+
+# Optional soft cap: not a hard block, just a periodic reminder so usage
+# can't silently run past a budget you meant to watch. Unset by default.
+_warn_at_raw = os.environ.get("LEADZAP_REQUEST_WARN_AT", "").strip()
+REQUEST_WARN_AT = int(_warn_at_raw) if _warn_at_raw.isdigit() else None
+
+
+@app.get("/api/usage")
+def get_usage() -> dict[str, Any]:
+    count = db.get_places_request_count()
+    should_warn = False
+    if REQUEST_WARN_AT:
+        last_warned = db.get_last_warned_request_count()
+        # Fires again each time the count crosses another full multiple
+        # of the threshold, not just once ever -- a warning that never
+        # repeats stops being useful the moment usage keeps climbing.
+        if count >= REQUEST_WARN_AT and count >= last_warned + REQUEST_WARN_AT:
+            should_warn = True
+    return {
+        "places_api_request_count": count,
+        "warn_threshold": REQUEST_WARN_AT,
+        "should_warn": should_warn,
+    }
+
+
+@app.post("/api/usage/acknowledge-warning")
+def acknowledge_usage_warning() -> dict[str, Any]:
+    db.set_last_warned_request_count(db.get_places_request_count())
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
