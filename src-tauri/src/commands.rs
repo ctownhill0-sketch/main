@@ -9,7 +9,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 use crate::db::AppDb;
-use crate::pipeline::{self, LeadRow, TagRow};
+use crate::pipeline::{self, LeadEmailRow, LeadRow, TagRow};
 use crate::places::{self, PlaceRow, PlacesClient};
 use crate::quadtree::{self, DeepSearchParams, DeepSearchProgress};
 use crate::saved_searches::{self, SavedSearchParams, SavedSearchRow};
@@ -404,4 +404,36 @@ pub async fn run_saved_search(
         .map_err(|e| e.to_string())?;
 
     Ok(RunSavedSearchResult { results, new_place_ids })
+}
+
+// ---------------------------------------------------------------------
+// Email enrichment (from the lead's own website — never Google Maps Content)
+// ---------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn enrich_lead_emails(
+    db: tauri::State<'_, AppDb>,
+    lead_id: i64,
+) -> Result<Vec<LeadEmailRow>, String> {
+    let website = pipeline::get_lead_website(&db.0, lead_id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| {
+            "This lead has no website on file yet. Fetch Place Details for it first.".to_string()
+        })?;
+
+    let found = crate::enrichment::enrich_website(&website)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    pipeline::save_lead_emails(&db.0, lead_id, &found)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    pipeline::list_lead_emails(&db.0, lead_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_lead_emails(db: tauri::State<'_, AppDb>, lead_id: i64) -> Result<Vec<LeadEmailRow>, String> {
+    pipeline::list_lead_emails(&db.0, lead_id).await.map_err(|e| e.to_string())
 }

@@ -94,6 +94,13 @@ export interface FetchDetailsResult {
   failed: FailedDetailFetch[];
 }
 
+export interface LeadEmailRow {
+  id: number;
+  email: string;
+  sourceUrl: string;
+  fetchedAt: string;
+}
+
 /** Typed wrappers over the Tauri command surface (src-tauri/src/commands.rs). */
 export const commands = {
   hasApiKey: () => invoke<boolean>("has_api_key"),
@@ -133,6 +140,9 @@ export const commands = {
   runSavedSearch: (id: number) => invoke<RunSavedSearchResult>("run_saved_search", { id }),
   fetchPlaceDetails: (placeIds: string[]) =>
     invoke<FetchDetailsResult>("fetch_place_details", { placeIds }),
+
+  enrichLeadEmails: (leadId: number) => invoke<LeadEmailRow[]>("enrich_lead_emails", { leadId }),
+  listLeadEmails: (leadId: number) => invoke<LeadEmailRow[]>("list_lead_emails", { leadId }),
 };
 
 /** Tauri command errors are rejected with a plain string message. */

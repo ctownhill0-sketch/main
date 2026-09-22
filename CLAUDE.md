@@ -49,10 +49,13 @@ verified as of 2026-09-21)
   (by stored place ID) when displaying/exporting. Always show a "last refreshed"
   timestamp next to such fields.
 - **Show Google attribution** wherever Places content is displayed.
-- Emails collected from a business's own website (Phase 9) are our data, not Google Maps
-  Content — no caching restriction applies to them.
+- Emails collected from a business's own website (`src-tauri/src/enrichment.rs`) are our
+  data, not Google Maps Content — no caching restriction applies to them.
 - There is **no email field** at any Places API tier — email enrichment always comes
-  from crawling the business's own site, never from Google.
+  from crawling the business's own site, never from Google. Enrichment respects the
+  target site's robots.txt (`src-tauri/src/robots.rs`, wildcard `User-agent: *` group
+  only), uses a 10s timeout and a descriptive User-Agent, and never sends email — it
+  only collects addresses, each with provenance (source URL + fetch time).
 
 ## Spend guardrails
 

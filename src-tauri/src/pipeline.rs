@@ -34,6 +34,60 @@ pub struct LeadRow {
 
 const DEFAULT_STATUS: &str = "New";
 
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LeadEmailRow {
+    pub id: i64,
+    pub email: String,
+    pub source_url: String,
+    pub fetched_at: String,
+}
+
+/// The website URL to crawl for this lead, if Place Details has been
+/// fetched and returned one. `None` means enrichment can't run yet.
+pub async fn get_lead_website(pool: &SqlitePool, lead_id: i64) -> Result<Option<String>, sqlx::Error> {
+    let row: Option<(Option<String>,)> = sqlx::query_as(
+        "SELECT p.website_uri FROM leads l JOIN places p ON p.place_id = l.place_id WHERE l.id = ?",
+    )
+    .bind(lead_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|(w,)| w))
+}
+
+pub async fn save_lead_emails(
+    pool: &SqlitePool,
+    lead_id: i64,
+    emails: &[crate::enrichment::FoundEmail],
+) -> Result<(), sqlx::Error> {
+    for e in emails {
+        sqlx::query(
+            "INSERT INTO lead_emails (lead_id, email, source_url) VALUES (?, ?, ?) \
+             ON CONFLICT(lead_id, email) DO UPDATE SET \
+               source_url = excluded.source_url, fetched_at = datetime('now')",
+        )
+        .bind(lead_id)
+        .bind(&e.email)
+        .bind(&e.source_url)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
+}
+
+pub async fn list_lead_emails(pool: &SqlitePool, lead_id: i64) -> Result<Vec<LeadEmailRow>, sqlx::Error> {
+    let rows: Vec<(i64, String, String, String)> = sqlx::query_as(
+        "SELECT id, email, source_url, fetched_at FROM lead_emails WHERE lead_id = ? ORDER BY fetched_at DESC",
+    )
+    .bind(lead_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, email, source_url, fetched_at)| LeadEmailRow { id, email, source_url, fetched_at })
+        .collect())
+}
+
 /// Adds a place to the pipeline if it isn't already there; a no-op
 /// (keeping the existing status/notes/tags) if it is. Returns the lead id
 /// either way.
@@ -285,5 +339,42 @@ mod tests {
         set_lead_statuses(&pool, &["New".to_string(), "Closed".to_string()]).await.unwrap();
         let statuses = get_lead_statuses(&pool).await.unwrap();
         assert_eq!(statuses, vec!["New", "Closed"]);
+    }
+
+    #[tokio::test]
+    async fn lead_website_is_none_until_place_details_have_been_fetched() {
+        let pool = seeded_pool().await;
+        seed_place(&pool, "p1", "Cafe").await;
+        let lead_id = add_lead(&pool, "p1").await.unwrap();
+
+        assert_eq!(get_lead_website(&pool, lead_id).await.unwrap(), None);
+
+        sqlx::query("UPDATE places SET website_uri = ? WHERE place_id = 'p1'")
+            .bind("https://example.com")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            get_lead_website(&pool, lead_id).await.unwrap(),
+            Some("https://example.com".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn saving_emails_twice_updates_fetched_at_instead_of_duplicating() {
+        let pool = seeded_pool().await;
+        seed_place(&pool, "p1", "Cafe").await;
+        let lead_id = add_lead(&pool, "p1").await.unwrap();
+
+        let emails = vec![crate::enrichment::FoundEmail {
+            email: "info@example.com".to_string(),
+            source_url: "https://example.com".to_string(),
+        }];
+        save_lead_emails(&pool, lead_id, &emails).await.unwrap();
+        save_lead_emails(&pool, lead_id, &emails).await.unwrap();
+
+        let rows = list_lead_emails(&pool, lead_id).await.unwrap();
+        assert_eq!(rows.len(), 1, "the same email must not be duplicated");
+        assert_eq!(rows[0].email, "info@example.com");
     }
 }

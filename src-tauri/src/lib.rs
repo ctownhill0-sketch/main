@@ -1,10 +1,12 @@
 mod commands;
 mod db;
+mod enrichment;
 mod geocoding;
 mod keychain;
 mod pipeline;
 mod places;
 mod quadtree;
+mod robots;
 mod saved_searches;
 
 use tauri::Manager;
@@ -64,6 +66,8 @@ pub fn run() {
             commands::list_saved_searches,
             commands::delete_saved_search,
             commands::run_saved_search,
+            commands::enrich_lead_emails,
+            commands::list_lead_emails,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

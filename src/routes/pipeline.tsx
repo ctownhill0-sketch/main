@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EmailsDialog } from "@/components/pipeline/emails-dialog";
 import { NotesDialog } from "@/components/pipeline/notes-dialog";
 import { TagBadgeList, TagPicker } from "@/components/pipeline/tag-picker";
 import { commands, commandErrorMessage, type LeadRow, type TagRow } from "@/lib/commands";
@@ -136,6 +137,7 @@ export function PipelinePage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Tags</TableHead>
                 <TableHead>Notes</TableHead>
+                <TableHead>Emails</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -176,6 +178,13 @@ export function PipelinePage() {
                       leadName={lead.displayName ?? "lead"}
                       notes={lead.notes}
                       onSave={(notes) => handleNotesSave(lead, notes)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <EmailsDialog
+                      leadId={lead.id}
+                      leadName={lead.displayName ?? "lead"}
+                      hasWebsite={!!lead.websiteUri}
                     />
                   </TableCell>
                   <TableCell>
@@ -230,11 +239,16 @@ export function PipelinePage() {
                             ))}
                           </SelectContent>
                         </Select>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-1">
                           <NotesDialog
                             leadName={lead.displayName ?? "lead"}
                             notes={lead.notes}
                             onSave={(notes) => handleNotesSave(lead, notes)}
+                          />
+                          <EmailsDialog
+                            leadId={lead.id}
+                            leadName={lead.displayName ?? "lead"}
+                            hasWebsite={!!lead.websiteUri}
                           />
                           <TagPicker
                             allTags={tags}

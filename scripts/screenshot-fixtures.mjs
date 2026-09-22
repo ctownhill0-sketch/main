@@ -117,6 +117,15 @@ const sampleSavedSearches = [
   },
 ];
 
+const sampleLeadEmails = [
+  {
+    id: 1,
+    email: "info@riversidecoffee.example",
+    sourceUrl: "https://example.com/contact",
+    fetchedAt: "2026-09-21T09:10:00Z",
+  },
+];
+
 export const fixtures = {
   has_api_key: true,
   list_places: samplePlaces,
@@ -125,4 +134,5 @@ export const fixtures = {
   list_tags: sampleTags,
   get_lead_statuses: ["New", "Contacted", "Qualified", "Won", "Lost"],
   list_saved_searches: sampleSavedSearches,
+  list_lead_emails: sampleLeadEmails,
 };
