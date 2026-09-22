@@ -65,8 +65,11 @@ verified as of 2026-09-21)
 - A monthly spend cap and a per-run call cap live in the `settings` table and are
   checked in `places/client.rs` before every batch of calls; hitting either is a hard
   stop, not a warning.
-- A build-time/test guard (`src-tauri/src/places/masks.rs` tests) fails if any mask
-  string contains an Enterprise/Atmosphere-tier field outside `MASK_DETAILS_ENTERPRISE`.
+- A build-time/test guard (`src-tauri/src/places/masks.rs`, test
+  `only_details_enterprise_mask_may_contain_enterprise_or_atmosphere_fields`) fails
+  `cargo test` if any mask string contains an Enterprise/Atmosphere-tier field outside
+  `MASK_DETAILS_ENTERPRISE`. Run `cargo test` (in `src-tauri/`) before pushing any change
+  that touches a mask constant.
 
 ## Secret storage
 

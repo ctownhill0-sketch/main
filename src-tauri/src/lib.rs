@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod geocoding;
 mod keychain;
+mod places;
 
 use tauri::Manager;
 
@@ -26,6 +27,11 @@ pub fn run() {
                 if let Err(e) = db::run_startup_cleanup(&pool).await {
                     eprintln!("startup cache-cleanup job failed: {e}");
                 }
+
+                let qps = places::cost::get_setting_f64(&pool, "rate_limit_qps", 5.0)
+                    .await
+                    .unwrap_or(5.0);
+                handle.manage(places::PlacesClient::new(qps));
 
                 handle.manage(db::AppDb(pool));
             });
