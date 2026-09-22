@@ -2,8 +2,10 @@ mod commands;
 mod db;
 mod geocoding;
 mod keychain;
+mod pipeline;
 mod places;
 mod quadtree;
+mod saved_searches;
 
 use tauri::Manager;
 
@@ -47,6 +49,20 @@ pub fn run() {
             commands::list_places,
             commands::start_deep_search,
             commands::cancel_deep_search,
+            commands::add_lead,
+            commands::remove_lead,
+            commands::update_lead_status,
+            commands::update_lead_notes,
+            commands::list_leads,
+            commands::list_tags,
+            commands::create_tag,
+            commands::set_lead_tags,
+            commands::get_lead_statuses,
+            commands::set_lead_statuses,
+            commands::save_search,
+            commands::list_saved_searches,
+            commands::delete_saved_search,
+            commands::run_saved_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

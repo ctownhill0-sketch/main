@@ -88,10 +88,12 @@ export function ResultsTable({
   rows,
   selected,
   onSelectedChange,
+  newPlaceIds,
 }: {
   rows: PlaceRow[];
   selected: Set<string>;
   onSelectedChange: (next: Set<string>) => void;
+  newPlaceIds?: Set<string>;
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -254,11 +256,15 @@ export function ResultsTable({
             {sorted.map((row) => {
               const isSelected = selected.has(row.placeId);
               const noWebsite = row.lastDetailsRefreshedAt && !row.websiteUri;
+              const isNew = newPlaceIds?.has(row.placeId) ?? false;
               return (
                 <TableRow
                   key={row.placeId}
                   data-state={isSelected ? "selected" : undefined}
-                  className={cn(noWebsite && "bg-warning/5")}
+                  className={cn(
+                    noWebsite && "bg-warning/5",
+                    isNew && "border-l-2 border-l-primary",
+                  )}
                 >
                   <TableCell>
                     <Checkbox
@@ -267,7 +273,16 @@ export function ResultsTable({
                       aria-label={`Select ${row.displayName ?? row.placeId}`}
                     />
                   </TableCell>
-                  <TableCell className="font-medium">{row.displayName ?? "Unnamed"}</TableCell>
+                  <TableCell className="font-medium">
+                    <span className="flex items-center gap-1.5">
+                      {row.displayName ?? "Unnamed"}
+                      {isNew && (
+                        <Badge variant="default" className="text-[10px]">
+                          New
+                        </Badge>
+                      )}
+                    </span>
+                  </TableCell>
                   <TableCell className="max-w-64 truncate text-muted-foreground">
                     {row.formattedAddress ?? "—"}
                   </TableCell>

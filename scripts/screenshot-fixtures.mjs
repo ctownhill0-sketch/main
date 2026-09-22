@@ -51,8 +51,78 @@ const samplePlaces = [
   },
 ];
 
+const sampleTags = [
+  { id: 1, name: "hot-lead", color: "#ff0000" },
+  { id: 2, name: "vip", color: null },
+];
+
+const sampleLeads = [
+  {
+    id: 1,
+    placeId: "p1",
+    status: "New",
+    notes: "Met at trade show, interested in bulk orders.",
+    createdAt: "2026-09-20T14:00:00Z",
+    updatedAt: "2026-09-20T14:00:00Z",
+    tags: [sampleTags[0]],
+    displayName: "Riverside Coffee Roasters",
+    formattedAddress: "412 Congress Ave, Austin, TX 78701",
+    primaryType: "cafe",
+    businessStatus: "OPERATIONAL",
+    websiteUri: "https://example.com",
+    nationalPhoneNumber: "(512) 555-0142",
+    rating: 4.6,
+  },
+  {
+    id: 2,
+    placeId: "p2",
+    status: "Contacted",
+    notes: "",
+    createdAt: "2026-09-20T14:05:00Z",
+    updatedAt: "2026-09-21T09:00:00Z",
+    tags: [sampleTags[0], sampleTags[1]],
+    displayName: "Downtown Plumbing Co",
+    formattedAddress: "88 E 5th St, Austin, TX 78701",
+    primaryType: "plumber",
+    businessStatus: "OPERATIONAL",
+    websiteUri: null,
+    nationalPhoneNumber: null,
+    rating: 3.9,
+  },
+  {
+    id: 3,
+    placeId: "p3",
+    status: "Qualified",
+    notes: "",
+    createdAt: "2026-09-19T14:05:00Z",
+    updatedAt: "2026-09-19T14:05:00Z",
+    tags: [],
+    displayName: "Sixth Street Diner",
+    formattedAddress: "215 6th St, Austin, TX 78701",
+    primaryType: "restaurant",
+    businessStatus: "CLOSED_TEMPORARILY",
+    websiteUri: null,
+    nationalPhoneNumber: null,
+    rating: null,
+  },
+];
+
+const sampleSavedSearches = [
+  {
+    id: 1,
+    name: "Austin coffee shops",
+    params: { query: "coffee shops in Austin, TX", rankPreference: null },
+    createdAt: "2026-09-18T10:00:00Z",
+    lastRunAt: "2026-09-21T09:00:00Z",
+  },
+];
+
 export const fixtures = {
   has_api_key: true,
   list_places: samplePlaces,
   quick_search: samplePlaces,
+  list_leads: sampleLeads,
+  list_tags: sampleTags,
+  get_lead_statuses: ["New", "Contacted", "Qualified", "Won", "Lost"],
+  list_saved_searches: sampleSavedSearches,
 };

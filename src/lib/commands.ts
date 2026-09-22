@@ -43,6 +43,47 @@ export interface DeepSearchProgressEvent {
   callCapReached: boolean;
 }
 
+export interface TagRow {
+  id: number;
+  name: string;
+  color: string | null;
+}
+
+export interface LeadRow {
+  id: number;
+  placeId: string;
+  status: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  tags: TagRow[];
+  displayName: string | null;
+  formattedAddress: string | null;
+  primaryType: string | null;
+  businessStatus: string | null;
+  websiteUri: string | null;
+  nationalPhoneNumber: string | null;
+  rating: number | null;
+}
+
+export interface SavedSearchParams {
+  query: string;
+  rankPreference: RankPreference | null;
+}
+
+export interface SavedSearchRow {
+  id: number;
+  name: string;
+  params: SavedSearchParams;
+  createdAt: string;
+  lastRunAt: string | null;
+}
+
+export interface RunSavedSearchResult {
+  results: PlaceRow[];
+  newPlaceIds: string[];
+}
+
 /** Typed wrappers over the Tauri command surface (src-tauri/src/commands.rs). */
 export const commands = {
   hasApiKey: () => invoke<boolean>("has_api_key"),
@@ -60,6 +101,26 @@ export const commands = {
     callCap?: number;
   }) => invoke<DeepSearchSummary>("start_deep_search", params),
   cancelDeepSearch: (runId: string) => invoke<void>("cancel_deep_search", { runId }),
+
+  addLead: (placeId: string) => invoke<number>("add_lead", { placeId }),
+  removeLead: (leadId: number) => invoke<void>("remove_lead", { leadId }),
+  updateLeadStatus: (leadId: number, status: string) =>
+    invoke<void>("update_lead_status", { leadId, status }),
+  updateLeadNotes: (leadId: number, notes: string) =>
+    invoke<void>("update_lead_notes", { leadId, notes }),
+  listLeads: () => invoke<LeadRow[]>("list_leads"),
+  listTags: () => invoke<TagRow[]>("list_tags"),
+  createTag: (name: string, color?: string) => invoke<TagRow>("create_tag", { name, color }),
+  setLeadTags: (leadId: number, tagIds: number[]) =>
+    invoke<void>("set_lead_tags", { leadId, tagIds }),
+  getLeadStatuses: () => invoke<string[]>("get_lead_statuses"),
+  setLeadStatuses: (statuses: string[]) => invoke<void>("set_lead_statuses", { statuses }),
+
+  saveSearch: (name: string, query: string, rankPreference?: RankPreference) =>
+    invoke<number>("save_search", { name, query, rankPreference }),
+  listSavedSearches: () => invoke<SavedSearchRow[]>("list_saved_searches"),
+  deleteSavedSearch: (id: number) => invoke<void>("delete_saved_search", { id }),
+  runSavedSearch: (id: number) => invoke<RunSavedSearchResult>("run_saved_search", { id }),
 };
 
 /** Tauri command errors are rejected with a plain string message. */

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeepSearchForm } from "@/components/search/deep-search-form";
+import { SaveSearchButton, SavedSearchesPanel } from "@/components/search/saved-searches-panel";
 import { commands, commandErrorMessage, type RankPreference } from "@/lib/commands";
 
 function QuickSearchForm() {
@@ -90,10 +91,16 @@ function QuickSearchForm() {
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <Button type="submit" disabled={isSearching || query.trim().length === 0}>
-            {isSearching && <Loader2Icon className="animate-spin" />}
-            Search
-          </Button>
+          <div className="flex gap-2">
+            <Button type="submit" disabled={isSearching || query.trim().length === 0}>
+              {isSearching && <Loader2Icon className="animate-spin" />}
+              Search
+            </Button>
+            <SaveSearchButton
+              query={query}
+              rankPreference={rankPreference === "" ? undefined : rankPreference}
+            />
+          </div>
         </form>
       </CardContent>
     </Card>
@@ -122,6 +129,8 @@ export function SearchPage() {
           <DeepSearchForm />
         </TabsContent>
       </Tabs>
+
+      <SavedSearchesPanel />
     </div>
   );
 }

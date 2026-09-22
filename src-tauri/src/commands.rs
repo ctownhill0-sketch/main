@@ -4,14 +4,15 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 use crate::db::AppDb;
+use crate::pipeline::{self, LeadRow, TagRow};
 use crate::places::{self, PlaceRow, PlacesClient};
 use crate::quadtree::{self, DeepSearchParams, DeepSearchProgress};
+use crate::saved_searches::{self, SavedSearchParams, SavedSearchRow};
 use crate::{geocoding, keychain};
 
 /// Cancellation flags for in-flight Deep Search runs, keyed by a run ID the
@@ -76,45 +77,13 @@ pub async fn quick_search(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "No API key configured. Add one in Settings.".to_string())?;
 
-    let rank = match rank_preference.as_deref() {
-        Some("DISTANCE") => Some(places::RankPreference::Distance),
-        Some("RELEVANCE") => Some(places::RankPreference::Relevance),
-        _ => None,
-    };
+    let rank = places::search::parse_rank_preference(rank_preference.as_deref());
 
-    let mut collected_ids: Vec<String> = Vec::new();
-    let mut page_token: Option<String> = None;
-    let max_pages = places::MAX_RESULTS_PER_QUERY / places::MAX_PAGE_SIZE;
+    let ids = places::search::run_quick_search(&db.0, &client, &api_key, query, rank)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    for page in 0..max_pages {
-        if page > 0 {
-            // Google needs a short delay before a fresh nextPageToken is valid.
-            tokio::time::sleep(Duration::from_secs(2)).await;
-        }
-
-        let response = client
-            .search_text(&db.0, &api_key, query, None, rank, page_token.as_deref())
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let got_results = !response.places.is_empty();
-        for place in &response.places {
-            if let Err(e) = places::store::upsert_discovered_place(&db.0, place).await {
-                eprintln!("failed to persist discovered place: {e}");
-                continue;
-            }
-            if let Some(id) = &place.id {
-                collected_ids.push(id.clone());
-            }
-        }
-
-        match response.next_page_token {
-            Some(token) if got_results => page_token = Some(token),
-            _ => break,
-        }
-    }
-
-    places::store::get_places(&db.0, &collected_ids)
+    places::store::get_places(&db.0, &ids)
         .await
         .map_err(|e| e.to_string())
 }
@@ -255,4 +224,127 @@ pub fn cancel_deep_search(registry: tauri::State<'_, DeepSearchRegistry>, run_id
         flag.store(true, Ordering::Relaxed);
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------
+// Pipeline (leads, tags, statuses)
+// ---------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn add_lead(db: tauri::State<'_, AppDb>, place_id: String) -> Result<i64, String> {
+    pipeline::add_lead(&db.0, &place_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn remove_lead(db: tauri::State<'_, AppDb>, lead_id: i64) -> Result<(), String> {
+    pipeline::remove_lead(&db.0, lead_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn update_lead_status(
+    db: tauri::State<'_, AppDb>,
+    lead_id: i64,
+    status: String,
+) -> Result<(), String> {
+    pipeline::update_status(&db.0, lead_id, &status).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn update_lead_notes(
+    db: tauri::State<'_, AppDb>,
+    lead_id: i64,
+    notes: String,
+) -> Result<(), String> {
+    pipeline::update_notes(&db.0, lead_id, &notes).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_leads(db: tauri::State<'_, AppDb>) -> Result<Vec<LeadRow>, String> {
+    pipeline::list_leads(&db.0).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_tags(db: tauri::State<'_, AppDb>) -> Result<Vec<TagRow>, String> {
+    pipeline::list_tags(&db.0).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn create_tag(
+    db: tauri::State<'_, AppDb>,
+    name: String,
+    color: Option<String>,
+) -> Result<TagRow, String> {
+    pipeline::create_tag(&db.0, &name, color.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn set_lead_tags(
+    db: tauri::State<'_, AppDb>,
+    lead_id: i64,
+    tag_ids: Vec<i64>,
+) -> Result<(), String> {
+    pipeline::set_lead_tags(&db.0, lead_id, &tag_ids)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_lead_statuses(db: tauri::State<'_, AppDb>) -> Result<Vec<String>, String> {
+    pipeline::get_lead_statuses(&db.0).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn set_lead_statuses(db: tauri::State<'_, AppDb>, statuses: Vec<String>) -> Result<(), String> {
+    pipeline::set_lead_statuses(&db.0, &statuses).await.map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------
+// Saved searches
+// ---------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn save_search(
+    db: tauri::State<'_, AppDb>,
+    name: String,
+    query: String,
+    rank_preference: Option<String>,
+) -> Result<i64, String> {
+    let params = SavedSearchParams { query, rank_preference };
+    saved_searches::save(&db.0, &name, &params).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_saved_searches(db: tauri::State<'_, AppDb>) -> Result<Vec<SavedSearchRow>, String> {
+    saved_searches::list(&db.0).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_saved_search(db: tauri::State<'_, AppDb>, id: i64) -> Result<(), String> {
+    saved_searches::delete(&db.0, id).await.map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunSavedSearchResult {
+    results: Vec<PlaceRow>,
+    new_place_ids: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn run_saved_search(
+    db: tauri::State<'_, AppDb>,
+    client: tauri::State<'_, PlacesClient>,
+    id: i64,
+) -> Result<RunSavedSearchResult, String> {
+    let api_key = keychain::get_api_key()
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No API key configured. Add one in Settings.".to_string())?;
+
+    let (results, new_place_ids) = saved_searches::run(&db.0, &client, &api_key, id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(RunSavedSearchResult { results, new_place_ids })
 }

@@ -7,6 +7,7 @@ pub mod client;
 pub mod cost;
 pub mod masks;
 pub mod rate_limit;
+pub mod search;
 pub mod store;
 
 pub use client::{
