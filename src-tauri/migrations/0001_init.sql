@@ -8,6 +8,11 @@
 -- display data, re-fetched live via Place Details when shown/exported, and
 -- is not covered by a long-lived cache column here.
 
+-- national_phone_number / website_uri / rating / user_rating_count are
+-- Enterprise-tier fields (see MASK_DETAILS_ENTERPRISE in CLAUDE.md): they
+-- are only ever populated by an explicit Place Details fetch (Phase 8),
+-- refreshed in place (never accumulated as history), and shown alongside
+-- `last_details_refreshed_at` so the UI can label them "as of <time>".
 CREATE TABLE IF NOT EXISTS places (
   place_id TEXT PRIMARY KEY,
   display_name TEXT,
@@ -18,6 +23,10 @@ CREATE TABLE IF NOT EXISTS places (
   cached_lng REAL,
   cached_at TEXT,
   discovered_at TEXT NOT NULL DEFAULT (datetime('now')),
+  national_phone_number TEXT,
+  website_uri TEXT,
+  rating REAL,
+  user_rating_count INTEGER,
   last_details_refreshed_at TEXT
 );
 

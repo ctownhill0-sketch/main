@@ -41,6 +41,8 @@ pub fn run() {
             commands::has_api_key,
             commands::validate_and_store_api_key,
             commands::remove_api_key,
+            commands::quick_search,
+            commands::list_places,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

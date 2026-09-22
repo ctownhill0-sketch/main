@@ -1,0 +1,58 @@
+// Fixture responses for scripts/screenshot.mjs's fake Tauri IPC, keyed by
+// command name exactly as invoked from the frontend (src/lib/commands.ts).
+const samplePlaces = [
+  {
+    placeId: "p1",
+    displayName: "Riverside Coffee Roasters",
+    formattedAddress: "412 Congress Ave, Austin, TX 78701",
+    primaryType: "cafe",
+    businessStatus: "OPERATIONAL",
+    lat: 30.2672,
+    lng: -97.7431,
+    discoveredAt: "2026-09-20T14:00:00Z",
+    cachedAt: "2026-09-21T09:00:00Z",
+    nationalPhoneNumber: "(512) 555-0142",
+    websiteUri: "https://example.com",
+    rating: 4.6,
+    userRatingCount: 812,
+    lastDetailsRefreshedAt: "2026-09-21T09:00:00Z",
+  },
+  {
+    placeId: "p2",
+    displayName: "Downtown Plumbing Co",
+    formattedAddress: "88 E 5th St, Austin, TX 78701",
+    primaryType: "plumber",
+    businessStatus: "OPERATIONAL",
+    lat: 30.2669,
+    lng: -97.7428,
+    discoveredAt: "2026-09-20T14:00:05Z",
+    cachedAt: "2026-09-21T09:00:05Z",
+    nationalPhoneNumber: null,
+    websiteUri: null,
+    rating: 3.9,
+    userRatingCount: 54,
+    lastDetailsRefreshedAt: "2026-09-21T09:00:05Z",
+  },
+  {
+    placeId: "p3",
+    displayName: "Sixth Street Diner",
+    formattedAddress: "215 6th St, Austin, TX 78701",
+    primaryType: "restaurant",
+    businessStatus: "CLOSED_TEMPORARILY",
+    lat: 30.2674,
+    lng: -97.7404,
+    discoveredAt: "2026-09-20T14:00:10Z",
+    cachedAt: null,
+    nationalPhoneNumber: null,
+    websiteUri: null,
+    rating: null,
+    userRatingCount: null,
+    lastDetailsRefreshedAt: null,
+  },
+];
+
+export const fixtures = {
+  has_api_key: true,
+  list_places: samplePlaces,
+  quick_search: samplePlaces,
+};

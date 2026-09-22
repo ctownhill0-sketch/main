@@ -37,6 +37,23 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 
+// Fake Tauri IPC so screens gated on `invoke()` render their real content
+// instead of falling back to an error/onboarding state. Fixture data lives
+// in scripts/screenshot-fixtures.mjs; extend it there as new commands land.
+const { fixtures } = await import("./screenshot-fixtures.mjs");
+await page.addInitScript((fixturesJson) => {
+  const fixtures = JSON.parse(fixturesJson);
+  window.__TAURI_INTERNALS__ = {
+    invoke: async (cmd) => {
+      if (cmd in fixtures) return fixtures[cmd];
+      console.warn(`[screenshot mock] no fixture for command "${cmd}"`);
+      return null;
+    },
+    transformCallback: () => 0,
+    unregisterCallback: () => {},
+  };
+}, JSON.stringify(fixtures));
+
 for (const route of routes) {
   const url = `http://localhost:${PORT}/#${route}`;
   await page.goto(url, { waitUntil: "networkidle" });

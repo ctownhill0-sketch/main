@@ -7,6 +7,11 @@ pub mod client;
 pub mod cost;
 pub mod masks;
 pub mod rate_limit;
+pub mod store;
 
-pub use client::{ClientError, LatLngLiteral, PlaceResult, PlacesClient, RankPreference, SearchResponse, Viewport};
+pub use client::{
+    ClientError, LatLngLiteral, PlaceResult, PlacesClient, RankPreference, SearchResponse,
+    Viewport, MAX_PAGE_SIZE, MAX_RESULTS_PER_QUERY,
+};
 pub use masks::{PlaceMask, MASK_DETAILS_ENTERPRISE, MASK_DISCOVERY, MASK_ID_ONLY};
+pub use store::PlaceRow;

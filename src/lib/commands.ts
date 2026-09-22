@@ -1,11 +1,34 @@
 import { invoke } from "@tauri-apps/api/core";
 
+/** Mirrors src-tauri/src/places/store.rs `PlaceRow` (camelCase over the wire). */
+export interface PlaceRow {
+  placeId: string;
+  displayName: string | null;
+  formattedAddress: string | null;
+  primaryType: string | null;
+  businessStatus: string | null;
+  lat: number | null;
+  lng: number | null;
+  discoveredAt: string;
+  cachedAt: string | null;
+  nationalPhoneNumber: string | null;
+  websiteUri: string | null;
+  rating: number | null;
+  userRatingCount: number | null;
+  lastDetailsRefreshedAt: string | null;
+}
+
+export type RankPreference = "RELEVANCE" | "DISTANCE";
+
 /** Typed wrappers over the Tauri command surface (src-tauri/src/commands.rs). */
 export const commands = {
   hasApiKey: () => invoke<boolean>("has_api_key"),
   validateAndStoreApiKey: (key: string) =>
     invoke<void>("validate_and_store_api_key", { key }),
   removeApiKey: () => invoke<void>("remove_api_key"),
+  quickSearch: (query: string, rankPreference?: RankPreference) =>
+    invoke<PlaceRow[]>("quick_search", { query, rankPreference }),
+  listPlaces: () => invoke<PlaceRow[]>("list_places"),
 };
 
 /** Tauri command errors are rejected with a plain string message. */
