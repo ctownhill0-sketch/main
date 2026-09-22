@@ -110,3 +110,18 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* tw-animate-css's utilities don't check this on their own — confirmed by
+   reading its source, no `prefers-reduced-motion` query anywhere in it — so
+   this is the one place that actually honors it, for every animation and
+   transition on the page, not just the ones this pass added. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
