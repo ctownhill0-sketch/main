@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import {
   DownloadIcon,
@@ -27,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmAlertDialog } from "@/components/common/confirm-alert-dialog";
 import { GoogleAttribution } from "@/components/common/google-attribution";
 import { EmailsDialog } from "@/components/pipeline/emails-dialog";
 import { NotesDialog } from "@/components/pipeline/notes-dialog";
@@ -68,19 +70,34 @@ export function PipelinePage() {
     }
   }
 
-  async function handleNotesSave(lead: LeadRow, notes: string) {
-    await commands.updateLeadNotes(lead.id, notes);
+  // Optimistic like handleStatusChange above: update local state first (so
+  // the UI — and here, the closing NotesDialog — reflects the change
+  // instantly), then fire the mutation in the background and roll back
+  // with a toast if it fails.
+  function handleNotesSave(lead: LeadRow, notes: string): Promise<void> {
+    const previousNotes = lead.notes;
     setLeads((prev) => prev?.map((l) => (l.id === lead.id ? { ...l, notes } : l)) ?? prev);
+    commands.updateLeadNotes(lead.id, notes).catch((err) => {
+      toast.error(commandErrorMessage(err));
+      setLeads(
+        (prev) => prev?.map((l) => (l.id === lead.id ? { ...l, notes: previousNotes } : l)) ?? prev,
+      );
+    });
+    return Promise.resolve();
   }
 
-  async function handleTagsChange(lead: LeadRow, tagIds: number[]) {
-    await commands.setLeadTags(lead.id, tagIds);
+  function handleTagsChange(lead: LeadRow, tagIds: number[]) {
+    const previousTags = lead.tags;
     setLeads(
       (prev) =>
         prev?.map((l) =>
           l.id === lead.id ? { ...l, tags: tags.filter((t) => tagIds.includes(t.id)) } : l,
         ) ?? prev,
     );
+    commands.setLeadTags(lead.id, tagIds).catch((err) => {
+      toast.error(commandErrorMessage(err));
+      setLeads((prev) => prev?.map((l) => (l.id === lead.id ? { ...l, tags: previousTags } : l)) ?? prev);
+    });
   }
 
   async function handleCreateTag(name: string) {
@@ -171,8 +188,11 @@ export function PipelinePage() {
       )}
       {error && <div className="p-6 text-sm text-destructive">{error}</div>}
       {leads !== null && leads.length === 0 && !error && (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          No leads yet — select places in Results and "Add to pipeline".
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+          <p>No leads yet — select places in Results and "Add to pipeline".</p>
+          <Button asChild size="sm">
+            <Link to="/results">Go to Results</Link>
+          </Button>
         </div>
       )}
 
@@ -240,15 +260,22 @@ export function PipelinePage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleRemove(lead)}
-                      aria-label={`Remove ${lead.displayName ?? "lead"} from pipeline`}
-                    >
-                      <Trash2Icon className="size-4" />
-                    </Button>
+                    <ConfirmAlertDialog
+                      trigger={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 text-muted-foreground hover:text-destructive"
+                          aria-label={`Remove ${lead.displayName ?? "lead"} from pipeline`}
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+                      }
+                      title={`Remove ${lead.displayName ?? "this lead"} from the pipeline?`}
+                      description="This deletes its status, tags, and notes. The place itself stays in Results and can be re-added at any time."
+                      confirmLabel="Remove"
+                      onConfirm={() => handleRemove(lead)}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Loader2Icon, PlusIcon, RefreshCwIcon, SearchCheckIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -125,8 +125,11 @@ export function ResultsPage() {
       )}
 
       {rows !== null && rows.length === 0 && !error && (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          No results yet — run a search first.
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+          <p>No results yet — run a search first.</p>
+          <Button asChild size="sm">
+            <Link to="/search">Go to Search</Link>
+          </Button>
         </div>
       )}
 

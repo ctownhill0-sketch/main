@@ -12,14 +12,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { ApiKeyForm } from "@/components/onboarding/api-key-form";
 import { useApiKeyStatus } from "@/hooks/use-api-key-status";
 import { commands, commandErrorMessage } from "@/lib/commands";
@@ -85,29 +85,32 @@ export function SettingsPage() {
               <Button variant="outline" onClick={() => setRotating(true)}>
                 Rotate key
               </Button>
-              <Dialog open={removeOpen} onOpenChange={setRemoveOpen}>
-                <DialogTrigger asChild>
+              <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
+                <AlertDialogTrigger asChild>
                   <Button variant="destructive">Remove key</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Remove API key?</DialogTitle>
-                    <DialogDescription>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Remove API key?</AlertDialogTitle>
+                    <AlertDialogDescription>
                       This deletes the key from your OS keychain. You'll need to
                       re-enter it before you can search again.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
                     <Button variant="outline" onClick={() => setRemoveOpen(false)}>
                       Cancel
                     </Button>
+                    {/* A plain Button, not AlertDialogAction — Action closes
+                        the dialog immediately on click, which would hide the
+                        in-flight loading state this async removal shows. */}
                     <Button variant="destructive" onClick={handleRemove} disabled={removing}>
                       {removing && <Loader2Icon className="animate-spin" />}
                       Remove
                     </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           )}
         </CardContent>

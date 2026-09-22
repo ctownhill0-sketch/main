@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Loader2Icon, PlayIcon, SaveIcon, SparklesIcon, Trash2Icon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { ConfirmAlertDialog } from "@/components/common/confirm-alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -154,15 +155,22 @@ export function SavedSearchesPanel() {
                 )}
                 Run
               </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-8 text-muted-foreground hover:text-destructive"
-                onClick={() => handleDelete(s.id)}
-                aria-label={`Delete saved search "${s.name}"`}
-              >
-                <Trash2Icon className="size-4" />
-              </Button>
+              <ConfirmAlertDialog
+                trigger={
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 text-muted-foreground hover:text-destructive"
+                    aria-label={`Delete saved search "${s.name}"`}
+                  >
+                    <Trash2Icon className="size-4" />
+                  </Button>
+                }
+                title={`Delete "${s.name}"?`}
+                description="This removes the saved query and its new-since-last-run history. It won't affect any places or leads you've already found."
+                confirmLabel="Delete"
+                onConfirm={() => handleDelete(s.id)}
+              />
             </div>
           </div>
         ))}
