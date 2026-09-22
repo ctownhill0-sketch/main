@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -33,6 +34,13 @@
     Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono",
     Consolas, monospace;
+
+  /* Motion tokens: fast ease-out entrance, faster linear-ish exit. Applied
+     explicitly via `ease-enter`/`ease-exit` utilities on dialogs, popovers,
+     dropdowns, and selects — never used for high-frequency interactions
+     (row selection, typing, keyboard nav) or as a default on everything. */
+  --ease-enter: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
 }
 
 .dark {
@@ -83,6 +91,8 @@
   --color-warning: var(--warning);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  --ease-enter: var(--ease-enter);
+  --ease-exit: var(--ease-exit);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
