@@ -2,6 +2,7 @@ import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AppShell } from "@/components/layout/app-shell";
 import { OnboardingGate } from "@/components/onboarding/onboarding-gate";
+import { CommandPalette } from "@/components/command-palette/command-palette";
 import { SearchPage } from "@/routes/search";
 import { ResultsPage } from "@/routes/results";
 import { PipelinePage } from "@/routes/pipeline";
@@ -22,6 +23,7 @@ function App() {
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </AppShell>
+        <CommandPalette />
       </OnboardingGate>
       <Toaster />
     </HashRouter>

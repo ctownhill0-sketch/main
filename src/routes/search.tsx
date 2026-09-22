@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2Icon, SearchIcon } from "lucide-react";
 
@@ -108,6 +108,16 @@ function QuickSearchForm() {
 }
 
 export function SearchPage() {
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<"quick" | "deep">(
+    searchParams.get("tab") === "deep" ? "deep" : "quick",
+  );
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t === "deep" || t === "quick") setTab(t);
+  }, [searchParams]);
+
   return (
     <div className="mx-auto max-w-xl p-6">
       <h1 className="mb-1 text-lg font-semibold">Search</h1>
@@ -117,7 +127,7 @@ export function SearchPage() {
         API calls.
       </p>
 
-      <Tabs defaultValue="quick">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "quick" | "deep")}>
         <TabsList className="mb-4">
           <TabsTrigger value="quick">Quick Search</TabsTrigger>
           <TabsTrigger value="deep">Deep Search</TabsTrigger>
