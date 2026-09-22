@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ResultsTable } from "@/components/results/results-table";
+import { ResultsTableSkeleton } from "@/components/results/results-table-skeleton";
 import { estimateCostUsd, formatUsd } from "@/lib/cost";
 import { commands, commandErrorMessage, type PlaceRow } from "@/lib/commands";
 
@@ -114,8 +115,8 @@ export function ResultsPage() {
       </div>
 
       {rows === null && !error && (
-        <div role="status" aria-label="Loading" className="flex flex-1 items-center justify-center">
-          <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+        <div role="status" aria-label="Loading results" className="flex-1 overflow-hidden">
+          <ResultsTableSkeleton />
         </div>
       )}
 

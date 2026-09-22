@@ -30,6 +30,7 @@ import {
 import { GoogleAttribution } from "@/components/common/google-attribution";
 import { EmailsDialog } from "@/components/pipeline/emails-dialog";
 import { NotesDialog } from "@/components/pipeline/notes-dialog";
+import { PipelineTableSkeleton } from "@/components/pipeline/pipeline-table-skeleton";
 import { TagBadgeList, TagPicker } from "@/components/pipeline/tag-picker";
 import { commands, commandErrorMessage, type LeadRow, type TagRow } from "@/lib/commands";
 import { exportLeadsToCsv, exportLeadsToXlsx } from "@/lib/export";
@@ -158,8 +159,13 @@ export function PipelinePage() {
         </div>
       </div>
 
-      {leads === null && !error && (
-        <div role="status" aria-label="Loading" className="flex flex-1 items-center justify-center">
+      {leads === null && !error && view === "table" && (
+        <div role="status" aria-label="Loading pipeline" className="flex-1 overflow-hidden">
+          <PipelineTableSkeleton />
+        </div>
+      )}
+      {leads === null && !error && view === "kanban" && (
+        <div role="status" aria-label="Loading pipeline" className="flex flex-1 items-center justify-center">
           <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
         </div>
       )}

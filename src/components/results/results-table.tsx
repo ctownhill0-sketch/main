@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDownIcon, ArrowUpIcon, ArrowUpDownIcon, StarIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,20 +13,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { PlaceRow } from "@/lib/commands";
 
 type SortKey = "displayName" | "formattedAddress" | "primaryType" | "businessStatus" | "rating";
 type SortDir = "asc" | "desc";
 type WebsiteFilter = "all" | "no-website" | "has-website" | "not-checked";
+
+// Shared between the sticky header and every virtual row so columns never
+// drift out of alignment.
+const GRID_TEMPLATE =
+  "2.5rem minmax(160px,1.4fr) minmax(180px,1.6fr) minmax(90px,0.8fr) minmax(120px,0.9fr) minmax(110px,0.9fr) minmax(110px,0.8fr) minmax(90px,0.8fr)";
+const ROW_HEIGHT = 44;
 
 function statusBadgeVariant(status: string | null) {
   if (status === "OPERATIONAL") return "success" as const;
@@ -77,11 +76,56 @@ function SortHeader({
     <button
       type="button"
       onClick={() => onClick(sortKey)}
-      className="flex items-center gap-1 hover:text-foreground"
+      className="flex cursor-default items-center gap-1 hover:text-foreground"
     >
       {label}
       <Icon className="size-3" />
     </button>
+  );
+}
+
+/** One grid "row" of cells — used by both real rows and the header row so
+ * column boundaries always line up via GRID_TEMPLATE. */
+function GridRow({
+  children,
+  className,
+  role = "row",
+  style,
+  ...rest
+}: {
+  children: ReactNode;
+  className?: string;
+  role?: string;
+  style?: CSSProperties;
+  "data-state"?: string;
+}) {
+  return (
+    <div
+      role={role}
+      className={cn("grid items-center", className)}
+      style={{ gridTemplateColumns: GRID_TEMPLATE, ...style }}
+      {...rest}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Cell({
+  children,
+  className,
+  role = "cell",
+  title,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+  role?: string;
+  title?: string;
+}) {
+  return (
+    <div role={role} className={cn("truncate px-3", className)} title={title}>
+      {children}
+    </div>
   );
 }
 
@@ -102,6 +146,7 @@ export function ResultsTable({
   const [websiteFilter, setWebsiteFilter] = useState<WebsiteFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("displayName");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const statuses = useMemo(
     () => Array.from(new Set(rows.map((r) => r.businessStatus).filter(Boolean))) as string[],
@@ -144,6 +189,13 @@ export function ResultsTable({
     return copy;
   }, [filtered, sortKey, sortDir]);
 
+  const virtualizer = useVirtualizer({
+    count: sorted.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  });
+
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -173,7 +225,7 @@ export function ResultsTable({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b p-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border/60 p-3">
         <Input
           placeholder="Filter by name or address..."
           value={search}
@@ -223,75 +275,84 @@ export function ResultsTable({
         </span>
       </div>
 
-      <div className="flex-1 overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-8">
-                <Checkbox
-                  checked={allFilteredSelected}
-                  onCheckedChange={(c) => toggleAll(c === true)}
-                  aria-label="Select all"
-                />
-              </TableHead>
-              <TableHead>
-                <SortHeader label="Name" sortKey="displayName" active={sortKey === "displayName"} dir={sortDir} onClick={toggleSort} />
-              </TableHead>
-              <TableHead>
-                <SortHeader label="Address" sortKey="formattedAddress" active={sortKey === "formattedAddress"} dir={sortDir} onClick={toggleSort} />
-              </TableHead>
-              <TableHead>
-                <SortHeader label="Type" sortKey="primaryType" active={sortKey === "primaryType"} dir={sortDir} onClick={toggleSort} />
-              </TableHead>
-              <TableHead>
-                <SortHeader label="Status" sortKey="businessStatus" active={sortKey === "businessStatus"} dir={sortDir} onClick={toggleSort} />
-              </TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Website</TableHead>
-              <TableHead>
-                <SortHeader label="Rating" sortKey="rating" active={sortKey === "rating"} dir={sortDir} onClick={toggleSort} />
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sorted.map((row) => {
+      <div ref={scrollRef} role="table" aria-label="Results" className="flex-1 overflow-auto">
+        <GridRow
+          role="row"
+          className="sticky top-0 z-10 h-9 border-b border-border/60 bg-background text-xs text-muted-foreground"
+        >
+          <Cell role="columnheader" className="flex items-center overflow-visible">
+            <Checkbox
+              checked={allFilteredSelected}
+              onCheckedChange={(c) => toggleAll(c === true)}
+              aria-label="Select all"
+            />
+          </Cell>
+          <Cell role="columnheader" className="overflow-visible">
+            <SortHeader label="Name" sortKey="displayName" active={sortKey === "displayName"} dir={sortDir} onClick={toggleSort} />
+          </Cell>
+          <Cell role="columnheader" className="overflow-visible">
+            <SortHeader label="Address" sortKey="formattedAddress" active={sortKey === "formattedAddress"} dir={sortDir} onClick={toggleSort} />
+          </Cell>
+          <Cell role="columnheader" className="overflow-visible">
+            <SortHeader label="Type" sortKey="primaryType" active={sortKey === "primaryType"} dir={sortDir} onClick={toggleSort} />
+          </Cell>
+          <Cell role="columnheader" className="overflow-visible">
+            <SortHeader label="Status" sortKey="businessStatus" active={sortKey === "businessStatus"} dir={sortDir} onClick={toggleSort} />
+          </Cell>
+          <Cell role="columnheader">Phone</Cell>
+          <Cell role="columnheader">Website</Cell>
+          <Cell role="columnheader" className="overflow-visible">
+            <SortHeader label="Rating" sortKey="rating" active={sortKey === "rating"} dir={sortDir} onClick={toggleSort} />
+          </Cell>
+        </GridRow>
+
+        {sorted.length === 0 ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            No places match the current filters.
+          </div>
+        ) : (
+          <div
+            role="rowgroup"
+            style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const row = sorted[virtualRow.index];
               const isSelected = selected.has(row.placeId);
               const noWebsite = row.lastDetailsRefreshedAt && !row.websiteUri;
               const isNew = newPlaceIds?.has(row.placeId) ?? false;
               return (
-                <TableRow
+                <GridRow
                   key={row.placeId}
                   data-state={isSelected ? "selected" : undefined}
                   className={cn(
+                    "absolute top-0 left-0 w-full border-b border-border/60 transition-colors duration-150 hover:bg-muted/50 data-[state=selected]:bg-muted",
                     noWebsite && "bg-warning/5",
                     isNew && "border-l-2 border-l-primary",
                   )}
+                  style={{ height: ROW_HEIGHT, transform: `translateY(${virtualRow.start}px)` }}
                 >
-                  <TableCell>
+                  <Cell className="overflow-visible">
                     <Checkbox
                       checked={isSelected}
                       onCheckedChange={(c) => toggleRow(row.placeId, c === true)}
                       aria-label={`Select ${row.displayName ?? row.placeId}`}
                     />
-                  </TableCell>
-                  <TableCell className="font-medium">
+                  </Cell>
+                  <Cell className="font-medium">
                     <span className="flex items-center gap-1.5">
-                      {row.displayName ?? "Unnamed"}
+                      <span className="truncate">{row.displayName ?? "Unnamed"}</span>
                       {isNew && (
-                        <Badge variant="default" className="text-[10px]">
+                        <Badge variant="default" className="shrink-0 text-[10px]">
                           New
                         </Badge>
                       )}
                     </span>
-                  </TableCell>
-                  <TableCell
-                    className="max-w-64 truncate text-muted-foreground"
-                    title={row.formattedAddress ?? undefined}
-                  >
+                  </Cell>
+                  <Cell className="text-muted-foreground" title={row.formattedAddress ?? undefined}>
                     {row.formattedAddress ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{row.primaryType ?? "—"}</TableCell>
-                  <TableCell>
+                  </Cell>
+                  <Cell className="text-muted-foreground">{row.primaryType ?? "—"}</Cell>
+                  <Cell className="overflow-visible">
                     {row.businessStatus ? (
                       <Badge variant={statusBadgeVariant(row.businessStatus)}>
                         {row.businessStatus.replaceAll("_", " ")}
@@ -299,36 +360,27 @@ export function ResultsTable({
                     ) : (
                       "—"
                     )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {row.nationalPhoneNumber ?? "—"}
-                  </TableCell>
-                  <TableCell>
+                  </Cell>
+                  <Cell className="text-muted-foreground">{row.nationalPhoneNumber ?? "—"}</Cell>
+                  <Cell className="overflow-visible">
                     <WebsiteBadge row={row} />
-                  </TableCell>
-                  <TableCell>
+                  </Cell>
+                  <Cell className="overflow-visible">
                     {row.rating != null ? (
                       <span className="flex items-center gap-1">
-                        <StarIcon className="size-3 fill-current text-warning" />
+                        <StarIcon className="size-3 shrink-0 fill-current text-warning" />
                         {row.rating.toFixed(1)}
                         <span className="text-muted-foreground">({row.userRatingCount ?? 0})</span>
                       </span>
                     ) : (
                       "—"
                     )}
-                  </TableCell>
-                </TableRow>
+                  </Cell>
+                </GridRow>
               );
             })}
-            {sorted.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                  No places match the current filters.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+          </div>
+        )}
       </div>
       <GoogleAttribution />
     </div>
