@@ -1,6 +1,6 @@
 export function EmailLegalNotice() {
   return (
-    <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+    <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
       <p className="mb-1 font-medium text-foreground">Before you email anyone:</p>
       <ul className="list-disc space-y-1 pl-4">
         <li>

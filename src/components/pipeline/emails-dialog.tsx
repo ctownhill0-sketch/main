@@ -105,10 +105,12 @@ export function EmailsDialog({
                 {emails.map((e) => (
                   <li
                     key={e.id}
-                    className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                    className="flex items-center justify-between gap-2 rounded-md border border-border/60 px-3 py-2 text-sm"
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{e.email}</p>
+                      <p className="truncate font-medium" title={e.email}>
+                        {e.email}
+                      </p>
                       <p className="truncate text-xs text-muted-foreground">
                         from{" "}
                         <a href={e.sourceUrl} target="_blank" rel="noreferrer" className="underline">

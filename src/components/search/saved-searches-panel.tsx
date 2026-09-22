@@ -121,9 +121,14 @@ export function SavedSearchesPanel() {
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         {searches.map((s) => (
-          <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+          <div
+            key={s.id}
+            className="flex items-center justify-between gap-2 rounded-md border border-border/60 px-3 py-2"
+          >
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{s.name}</p>
+              <p className="truncate text-sm font-medium" title={s.name}>
+                {s.name}
+              </p>
               <p className="truncate text-xs text-muted-foreground">
                 {s.params.query}
                 {s.lastRunAt ? ` · last run ${new Date(s.lastRunAt).toLocaleString()}` : " · never run"}

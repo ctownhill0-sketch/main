@@ -63,7 +63,7 @@ export function TagPicker({
             <p className="px-1 py-1 text-xs text-muted-foreground">No tags yet.</p>
           )}
         </div>
-        <div className="mt-2 flex gap-1 border-t pt-2">
+        <div className="mt-2 flex gap-1 border-t border-border/60 pt-2">
           <Input
             value={newTagName}
             onChange={(e) => setNewTagName(e.currentTarget.value)}

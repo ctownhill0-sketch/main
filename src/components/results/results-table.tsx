@@ -284,7 +284,10 @@ export function ResultsTable({
                       )}
                     </span>
                   </TableCell>
-                  <TableCell className="max-w-64 truncate text-muted-foreground">
+                  <TableCell
+                    className="max-w-64 truncate text-muted-foreground"
+                    title={row.formattedAddress ?? undefined}
+                  >
                     {row.formattedAddress ?? "—"}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{row.primaryType ?? "—"}</TableCell>

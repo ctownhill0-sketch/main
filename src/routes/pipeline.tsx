@@ -116,7 +116,7 @@ export function PipelinePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b p-4">
+      <div className="flex items-center justify-between border-b border-border/60 p-4">
         <div>
           <h1 className="text-lg font-semibold">Pipeline</h1>
           <p className="text-sm text-muted-foreground">
@@ -137,7 +137,7 @@ export function PipelinePage() {
               </Button>
             </div>
           )}
-          <div className="flex gap-1 rounded-md border p-1">
+          <div className="flex gap-1 rounded-md border border-border/60 p-1">
             <Button
               variant={view === "table" ? "secondary" : "ghost"}
               size="sm"
@@ -188,7 +188,10 @@ export function PipelinePage() {
               {leads.map((lead) => (
                 <TableRow key={lead.id}>
                   <TableCell className="font-medium">{lead.displayName ?? "Unnamed"}</TableCell>
-                  <TableCell className="max-w-64 truncate text-muted-foreground">
+                  <TableCell
+                    className="max-w-64 truncate text-muted-foreground"
+                    title={lead.formattedAddress ?? undefined}
+                  >
                     {lead.formattedAddress ?? "—"}
                   </TableCell>
                   <TableCell>
@@ -265,7 +268,10 @@ export function PipelinePage() {
                         <CardTitle className="text-xs font-semibold">
                           {lead.displayName ?? "Unnamed"}
                         </CardTitle>
-                        <p className="truncate text-[11px] text-muted-foreground">
+                        <p
+                          className="truncate text-[11px] text-muted-foreground"
+                          title={lead.formattedAddress ?? undefined}
+                        >
                           {lead.formattedAddress ?? "—"}
                         </p>
                       </CardHeader>

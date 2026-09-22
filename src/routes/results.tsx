@@ -76,7 +76,7 @@ export function ResultsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b p-4">
+      <div className="flex items-center justify-between border-b border-border/60 p-4">
         <div>
           <h1 className="text-lg font-semibold">Results</h1>
           <p className="text-sm text-muted-foreground">

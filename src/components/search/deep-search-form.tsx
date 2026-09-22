@@ -197,7 +197,7 @@ export function DeepSearchForm() {
           </form>
 
           {state === "running" && (
-            <div className="mt-4 flex flex-col gap-3 rounded-md border p-4">
+            <div className="mt-4 flex flex-col gap-3 rounded-md border border-border/60 p-4">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-sm font-medium">
                   <Loader2Icon className="size-4 animate-spin" />
