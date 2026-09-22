@@ -122,6 +122,7 @@ export function EmailsDialog({
                       size="icon"
                       className="size-7 shrink-0"
                       onClick={() => handleCopy(e.email)}
+                      aria-label={`Copy ${e.email}`}
                     >
                       <CopyIcon className="size-3.5" />
                     </Button>

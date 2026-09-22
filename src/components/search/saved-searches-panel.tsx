@@ -154,6 +154,7 @@ export function SavedSearchesPanel() {
                 variant="ghost"
                 className="size-8 text-muted-foreground hover:text-destructive"
                 onClick={() => handleDelete(s.id)}
+                aria-label={`Delete saved search "${s.name}"`}
               >
                 <Trash2Icon className="size-4" />
               </Button>

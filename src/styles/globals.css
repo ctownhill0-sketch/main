@@ -25,6 +25,14 @@
   --radius: 0.5rem;
   --success: oklch(0.6 0.15 145);
   --warning: oklch(0.75 0.15 80);
+
+  /* Native system-font stacks — a desktop app should render instantly with
+     no webfont fetch, and look native on each OS rather than imposing a
+     single brand typeface. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono",
+    Consolas, monospace;
 }
 
 .dark {
@@ -73,6 +81,8 @@
   --color-ring: var(--ring);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

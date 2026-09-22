@@ -9,7 +9,7 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
 
   if (status === "loading") {
     return (
-      <div className="flex h-screen w-screen items-center justify-center">
+      <div role="status" aria-label="Loading" className="flex h-screen w-screen items-center justify-center">
         <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
       </div>
     );

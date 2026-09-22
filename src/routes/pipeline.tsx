@@ -159,7 +159,7 @@ export function PipelinePage() {
       </div>
 
       {leads === null && !error && (
-        <div className="flex flex-1 items-center justify-center">
+        <div role="status" aria-label="Loading" className="flex flex-1 items-center justify-center">
           <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
         </div>
       )}
@@ -236,6 +236,7 @@ export function PipelinePage() {
                       size="icon"
                       className="size-7 text-muted-foreground hover:text-destructive"
                       onClick={() => handleRemove(lead)}
+                      aria-label={`Remove ${lead.displayName ?? "lead"} from pipeline`}
                     >
                       <Trash2Icon className="size-4" />
                     </Button>

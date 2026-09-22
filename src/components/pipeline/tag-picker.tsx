@@ -76,7 +76,7 @@ export function TagPicker({
               }
             }}
           />
-          <Button size="icon" className="size-7" onClick={handleCreate}>
+          <Button size="icon" className="size-7" onClick={handleCreate} aria-label="Create tag">
             <PlusIcon className="size-3" />
           </Button>
         </div>

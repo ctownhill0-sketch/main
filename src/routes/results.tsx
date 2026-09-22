@@ -114,7 +114,7 @@ export function ResultsPage() {
       </div>
 
       {rows === null && !error && (
-        <div className="flex flex-1 items-center justify-center">
+        <div role="status" aria-label="Loading" className="flex flex-1 items-center justify-center">
           <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
         </div>
       )}
