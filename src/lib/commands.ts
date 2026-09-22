@@ -20,6 +20,29 @@ export interface PlaceRow {
 
 export type RankPreference = "RELEVANCE" | "DISTANCE";
 
+export interface DeepSearchSummary {
+  placeIds: string[];
+  tilesScanned: number;
+  tilesSubdivided: number;
+  callsMade: number;
+  estimatedCostUsd: number;
+  cancelled: boolean;
+  callCapReached: boolean;
+  areaFormattedAddress: string;
+}
+
+export interface DeepSearchProgressEvent {
+  runId: string;
+  tilesScanned: number;
+  tilesSubdivided: number;
+  uniquePlacesFound: number;
+  callsMade: number;
+  estimatedCostUsd: number;
+  done: boolean;
+  cancelled: boolean;
+  callCapReached: boolean;
+}
+
 /** Typed wrappers over the Tauri command surface (src-tauri/src/commands.rs). */
 export const commands = {
   hasApiKey: () => invoke<boolean>("has_api_key"),
@@ -29,6 +52,14 @@ export const commands = {
   quickSearch: (query: string, rankPreference?: RankPreference) =>
     invoke<PlaceRow[]>("quick_search", { query, rankPreference }),
   listPlaces: () => invoke<PlaceRow[]>("list_places"),
+  startDeepSearch: (params: {
+    runId: string;
+    query: string;
+    location: string;
+    maxDepth?: number;
+    callCap?: number;
+  }) => invoke<DeepSearchSummary>("start_deep_search", params),
+  cancelDeepSearch: (runId: string) => invoke<void>("cancel_deep_search", { runId }),
 };
 
 /** Tauri command errors are rejected with a plain string message. */

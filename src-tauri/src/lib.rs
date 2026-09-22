@@ -3,6 +3,7 @@ mod db;
 mod geocoding;
 mod keychain;
 mod places;
+mod quadtree;
 
 use tauri::Manager;
 
@@ -11,6 +12,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
+        .manage(commands::DeepSearchRegistry::default())
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::block_on(async move {
@@ -43,6 +45,8 @@ pub fn run() {
             commands::remove_api_key,
             commands::quick_search,
             commands::list_places,
+            commands::start_deep_search,
+            commands::cancel_deep_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
