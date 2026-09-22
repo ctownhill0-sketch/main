@@ -65,6 +65,54 @@ pub async fn upsert_discovered_place(pool: &SqlitePool, place: &PlaceResult) -> 
     Ok(())
 }
 
+/// Applies an Enterprise-tier Place Details response to a place: refreshes
+/// display fields, coordinates, and the Enterprise-only fields (phone,
+/// website, rating), and stamps `last_details_refreshed_at`. Only ever
+/// called for a place the caller explicitly fetched details for — never in
+/// bulk over every discovered place (see MASK_DETAILS_ENTERPRISE in
+/// CLAUDE.md).
+pub async fn apply_place_details(pool: &SqlitePool, place: &PlaceResult) -> Result<(), sqlx::Error> {
+    let Some(place_id) = &place.id else {
+        return Ok(());
+    };
+    let display_name = place.display_name.as_ref().map(|n| n.text.clone());
+    let lat = place.location.map(|l| l.latitude);
+    let lng = place.location.map(|l| l.longitude);
+
+    sqlx::query(
+        "INSERT INTO places (place_id, display_name, formatted_address, business_status, \
+                              cached_lat, cached_lng, cached_at, national_phone_number, \
+                              website_uri, rating, user_rating_count, last_details_refreshed_at) \
+         VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, datetime('now')) \
+         ON CONFLICT(place_id) DO UPDATE SET \
+           display_name = excluded.display_name, \
+           formatted_address = excluded.formatted_address, \
+           business_status = excluded.business_status, \
+           cached_lat = excluded.cached_lat, \
+           cached_lng = excluded.cached_lng, \
+           cached_at = excluded.cached_at, \
+           national_phone_number = excluded.national_phone_number, \
+           website_uri = excluded.website_uri, \
+           rating = excluded.rating, \
+           user_rating_count = excluded.user_rating_count, \
+           last_details_refreshed_at = excluded.last_details_refreshed_at",
+    )
+    .bind(place_id)
+    .bind(display_name)
+    .bind(&place.formatted_address)
+    .bind(&place.business_status)
+    .bind(lat)
+    .bind(lng)
+    .bind(&place.national_phone_number)
+    .bind(&place.website_uri)
+    .bind(place.rating)
+    .bind(place.user_rating_count.map(|n| n as i64))
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 pub async fn get_places(pool: &SqlitePool, place_ids: &[String]) -> Result<Vec<PlaceRow>, sqlx::Error> {
     if place_ids.is_empty() {
         return Ok(Vec::new());
@@ -176,6 +224,35 @@ mod tests {
 
         assert_eq!(second[0].display_name.as_deref(), Some("Renamed Cafe"));
         assert_eq!(second[0].discovered_at, first_discovered_at, "discovered_at must not change on rediscovery");
+    }
+
+    #[tokio::test]
+    async fn apply_place_details_fills_in_enterprise_fields_and_stamps_refreshed_at() {
+        let pool = seeded_pool().await;
+        upsert_discovered_place(&pool, &sample_place("p1", "Cafe")).await.unwrap();
+
+        let before = get_places(&pool, &["p1".to_string()]).await.unwrap();
+        assert!(before[0].website_uri.is_none());
+        assert!(before[0].last_details_refreshed_at.is_none());
+
+        let details = PlaceResult {
+            id: Some("p1".to_string()),
+            display_name: Some(LocalizedText { text: "Cafe".to_string() }),
+            website_uri: Some("https://example.com".to_string()),
+            national_phone_number: Some("555-1234".to_string()),
+            rating: Some(4.5),
+            user_rating_count: Some(200),
+            ..Default::default()
+        };
+        apply_place_details(&pool, &details).await.unwrap();
+
+        let after = get_places(&pool, &["p1".to_string()]).await.unwrap();
+        assert_eq!(after[0].website_uri.as_deref(), Some("https://example.com"));
+        assert_eq!(after[0].national_phone_number.as_deref(), Some("555-1234"));
+        assert_eq!(after[0].rating, Some(4.5));
+        assert_eq!(after[0].user_rating_count, Some(200));
+        assert!(after[0].last_details_refreshed_at.is_some());
+        assert_eq!(after[0].discovered_at, before[0].discovered_at, "discovered_at must not change");
     }
 
     #[tokio::test]

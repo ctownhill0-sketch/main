@@ -95,6 +95,63 @@ pub async fn list_places(db: tauri::State<'_, AppDb>) -> Result<Vec<PlaceRow>, S
         .map_err(|e| e.to_string())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FetchDetailsResult {
+    updated: Vec<PlaceRow>,
+    failed: Vec<FailedDetailFetch>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FailedDetailFetch {
+    place_id: String,
+    error: String,
+}
+
+/// Phase-2 spend: fetches MASK_DETAILS_ENTERPRISE for exactly the given
+/// place IDs — never "refresh everything". Callers (the frontend) must
+/// pass an explicit, non-empty list of places the user selected/kept.
+#[tauri::command]
+pub async fn fetch_place_details(
+    db: tauri::State<'_, AppDb>,
+    client: tauri::State<'_, PlacesClient>,
+    place_ids: Vec<String>,
+) -> Result<FetchDetailsResult, String> {
+    if place_ids.is_empty() {
+        return Err("Select at least one lead to fetch details for.".to_string());
+    }
+
+    let api_key = keychain::get_api_key()
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No API key configured. Add one in Settings.".to_string())?;
+
+    let mut updated_ids = Vec::new();
+    let mut failed = Vec::new();
+
+    for place_id in &place_ids {
+        match client
+            .get_place_details(&db.0, &api_key, place_id, places::PlaceMask::DetailsEnterprise)
+            .await
+        {
+            Ok(details) => {
+                if let Err(e) = places::store::apply_place_details(&db.0, &details).await {
+                    failed.push(FailedDetailFetch { place_id: place_id.clone(), error: e.to_string() });
+                    continue;
+                }
+                updated_ids.push(place_id.clone());
+            }
+            Err(e) => failed.push(FailedDetailFetch { place_id: place_id.clone(), error: e.to_string() }),
+        }
+    }
+
+    let updated = places::store::get_places(&db.0, &updated_ids)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(FetchDetailsResult { updated, failed })
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct DeepSearchProgressEvent {

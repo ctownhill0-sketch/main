@@ -84,6 +84,16 @@ export interface RunSavedSearchResult {
   newPlaceIds: string[];
 }
 
+export interface FailedDetailFetch {
+  placeId: string;
+  error: string;
+}
+
+export interface FetchDetailsResult {
+  updated: PlaceRow[];
+  failed: FailedDetailFetch[];
+}
+
 /** Typed wrappers over the Tauri command surface (src-tauri/src/commands.rs). */
 export const commands = {
   hasApiKey: () => invoke<boolean>("has_api_key"),
@@ -121,6 +131,8 @@ export const commands = {
   listSavedSearches: () => invoke<SavedSearchRow[]>("list_saved_searches"),
   deleteSavedSearch: (id: number) => invoke<void>("delete_saved_search", { id }),
   runSavedSearch: (id: number) => invoke<RunSavedSearchResult>("run_saved_search", { id }),
+  fetchPlaceDetails: (placeIds: string[]) =>
+    invoke<FetchDetailsResult>("fetch_place_details", { placeIds }),
 };
 
 /** Tauri command errors are rejected with a plain string message. */

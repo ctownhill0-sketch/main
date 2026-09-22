@@ -47,6 +47,7 @@ pub fn run() {
             commands::remove_api_key,
             commands::quick_search,
             commands::list_places,
+            commands::fetch_place_details,
             commands::start_deep_search,
             commands::cancel_deep_search,
             commands::add_lead,
