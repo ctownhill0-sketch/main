@@ -3,6 +3,7 @@ import { ArrowDownIcon, ArrowUpIcon, ArrowUpDownIcon, StarIcon } from "lucide-re
 
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { GoogleAttribution } from "@/components/common/google-attribution";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -326,6 +327,7 @@ export function ResultsTable({
           </TableBody>
         </Table>
       </div>
+      <GoogleAttribution />
     </div>
   );
 }

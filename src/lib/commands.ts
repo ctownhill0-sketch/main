@@ -101,6 +101,12 @@ export interface LeadEmailRow {
   fetchedAt: string;
 }
 
+export interface SpendSummary {
+  monthToDateUsd: number;
+  monthlyCapUsd: number;
+  perRunCallCap: number;
+}
+
 /** Typed wrappers over the Tauri command surface (src-tauri/src/commands.rs). */
 export const commands = {
   hasApiKey: () => invoke<boolean>("has_api_key"),
@@ -143,6 +149,10 @@ export const commands = {
 
   enrichLeadEmails: (leadId: number) => invoke<LeadEmailRow[]>("enrich_lead_emails", { leadId }),
   listLeadEmails: (leadId: number) => invoke<LeadEmailRow[]>("list_lead_emails", { leadId }),
+
+  getSpendSummary: () => invoke<SpendSummary>("get_spend_summary"),
+  setSpendCaps: (monthlyCapUsd: number, perRunCallCap: number) =>
+    invoke<void>("set_spend_caps", { monthlyCapUsd, perRunCallCap }),
 };
 
 /** Tauri command errors are rejected with a plain string message. */

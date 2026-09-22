@@ -135,4 +135,5 @@ export const fixtures = {
   get_lead_statuses: ["New", "Contacted", "Qualified", "Won", "Lost"],
   list_saved_searches: sampleSavedSearches,
   list_lead_emails: sampleLeadEmails,
+  get_spend_summary: { monthToDateUsd: 4.32, monthlyCapUsd: 50, perRunCallCap: 200 },
 };

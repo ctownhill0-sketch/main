@@ -437,3 +437,57 @@ pub async fn enrich_lead_emails(
 pub async fn list_lead_emails(db: tauri::State<'_, AppDb>, lead_id: i64) -> Result<Vec<LeadEmailRow>, String> {
     pipeline::list_lead_emails(&db.0, lead_id).await.map_err(|e| e.to_string())
 }
+
+// ---------------------------------------------------------------------
+// Spend summary (Compliance panel)
+// ---------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpendSummary {
+    month_to_date_usd: f64,
+    monthly_cap_usd: f64,
+    per_run_call_cap: u32,
+}
+
+#[tauri::command]
+pub async fn get_spend_summary(db: tauri::State<'_, AppDb>) -> Result<SpendSummary, String> {
+    let month_to_date_usd = places::cost::month_to_date_spend_usd(&db.0)
+        .await
+        .map_err(|e| e.to_string())?;
+    let monthly_cap_usd = places::cost::get_monthly_spend_cap_usd(&db.0)
+        .await
+        .map_err(|e| e.to_string())?;
+    let per_run_call_cap = places::cost::get_per_run_call_cap(&db.0)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(SpendSummary { month_to_date_usd, monthly_cap_usd, per_run_call_cap })
+}
+
+#[tauri::command]
+pub async fn set_spend_caps(
+    db: tauri::State<'_, AppDb>,
+    monthly_cap_usd: f64,
+    per_run_call_cap: u32,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO settings (key, value) VALUES ('monthly_spend_cap_usd', ?) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(monthly_cap_usd.to_string())
+    .execute(&db.0)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "INSERT INTO settings (key, value) VALUES ('per_run_call_cap', ?) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(per_run_call_cap.to_string())
+    .execute(&db.0)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}

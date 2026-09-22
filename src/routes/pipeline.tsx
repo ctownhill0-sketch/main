@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { KanbanIcon, Loader2Icon, TableIcon, Trash2Icon } from "lucide-react";
+import {
+  DownloadIcon,
+  FileSpreadsheetIcon,
+  KanbanIcon,
+  Loader2Icon,
+  TableIcon,
+  Trash2Icon,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,10 +27,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { GoogleAttribution } from "@/components/common/google-attribution";
 import { EmailsDialog } from "@/components/pipeline/emails-dialog";
 import { NotesDialog } from "@/components/pipeline/notes-dialog";
 import { TagBadgeList, TagPicker } from "@/components/pipeline/tag-picker";
 import { commands, commandErrorMessage, type LeadRow, type TagRow } from "@/lib/commands";
+import { exportLeadsToCsv, exportLeadsToXlsx } from "@/lib/export";
 import { cn } from "@/lib/utils";
 
 type View = "table" | "kanban";
@@ -85,6 +94,26 @@ export function PipelinePage() {
     toast.success(`Removed ${lead.displayName ?? "lead"} from the pipeline.`);
   }
 
+  async function handleExportCsv() {
+    if (!leads || leads.length === 0) return;
+    try {
+      const saved = await exportLeadsToCsv(leads);
+      if (saved) toast.success(`Exported ${leads.length} leads to CSV.`);
+    } catch (err) {
+      toast.error(commandErrorMessage(err));
+    }
+  }
+
+  async function handleExportXlsx() {
+    if (!leads || leads.length === 0) return;
+    try {
+      const saved = await exportLeadsToXlsx(leads);
+      if (saved) toast.success(`Exported ${leads.length} leads to XLSX.`);
+    } catch (err) {
+      toast.error(commandErrorMessage(err));
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b p-4">
@@ -95,23 +124,37 @@ export function PipelinePage() {
             yours — kept indefinitely regardless of Google's caching terms.
           </p>
         </div>
-        <div className="flex gap-1 rounded-md border p-1">
-          <Button
-            variant={view === "table" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setView("table")}
-          >
-            <TableIcon className="size-4" />
-            Table
-          </Button>
-          <Button
-            variant={view === "kanban" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setView("kanban")}
-          >
-            <KanbanIcon className="size-4" />
-            Kanban
-          </Button>
+        <div className="flex items-center gap-2">
+          {leads !== null && leads.length > 0 && (
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" onClick={handleExportCsv}>
+                <DownloadIcon className="size-4" />
+                CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleExportXlsx}>
+                <FileSpreadsheetIcon className="size-4" />
+                XLSX
+              </Button>
+            </div>
+          )}
+          <div className="flex gap-1 rounded-md border p-1">
+            <Button
+              variant={view === "table" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setView("table")}
+            >
+              <TableIcon className="size-4" />
+              Table
+            </Button>
+            <Button
+              variant={view === "kanban" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setView("kanban")}
+            >
+              <KanbanIcon className="size-4" />
+              Kanban
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -266,6 +309,8 @@ export function PipelinePage() {
           })}
         </div>
       )}
+
+      {leads !== null && leads.length > 0 && <GoogleAttribution />}
     </div>
   );
 }

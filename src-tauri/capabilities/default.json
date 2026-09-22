@@ -6,6 +6,10 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "sql:default"
+    "sql:default",
+    "dialog:default",
+    "fs:default",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file"
   ]
 }
