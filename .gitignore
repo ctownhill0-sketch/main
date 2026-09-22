@@ -31,3 +31,6 @@ src-tauri/gen
 *.njsproj
 *.sln
 *.sw?
+
+# Local screenshot verification output
+scripts/.screenshots/
