@@ -5,20 +5,11 @@ import { ArrowDownIcon, ArrowUpIcon, ArrowUpDownIcon, StarIcon } from "lucide-re
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { GoogleAttribution } from "@/components/common/google-attribution";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { PlaceRow } from "@/lib/commands";
 
 type SortKey = "displayName" | "formattedAddress" | "primaryType" | "businessStatus" | "rating";
 type SortDir = "asc" | "desc";
-type WebsiteFilter = "all" | "no-website" | "has-website" | "not-checked";
 
 // Shared between the sticky header and every virtual row so columns never
 // drift out of alignment.
@@ -131,49 +122,26 @@ function Cell({
 
 export function ResultsTable({
   rows,
+  predicate,
   selected,
   onSelectedChange,
   newPlaceIds,
 }: {
   rows: PlaceRow[];
+  /** Client-side filter from the Refine bar — defaults to "show everything". */
+  predicate?: (row: PlaceRow) => boolean;
   selected: Set<string>;
   onSelectedChange: (next: Set<string>) => void;
   newPlaceIds?: Set<string>;
 }) {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [websiteFilter, setWebsiteFilter] = useState<WebsiteFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("displayName");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const statuses = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.businessStatus).filter(Boolean))) as string[],
-    [rows],
+  const filtered = useMemo(
+    () => (predicate ? rows.filter(predicate) : rows),
+    [rows, predicate],
   );
-  const types = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.primaryType).filter(Boolean))) as string[],
-    [rows],
-  );
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (q) {
-        const haystack = `${r.displayName ?? ""} ${r.formattedAddress ?? ""}`.toLowerCase();
-        if (!haystack.includes(q)) return false;
-      }
-      if (statusFilter !== "all" && r.businessStatus !== statusFilter) return false;
-      if (typeFilter !== "all" && r.primaryType !== typeFilter) return false;
-      if (websiteFilter === "no-website" && !(r.lastDetailsRefreshedAt && !r.websiteUri)) {
-        return false;
-      }
-      if (websiteFilter === "has-website" && !r.websiteUri) return false;
-      if (websiteFilter === "not-checked" && r.lastDetailsRefreshedAt) return false;
-      return true;
-    });
-  }, [rows, search, statusFilter, typeFilter, websiteFilter]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -225,56 +193,6 @@ export function ResultsTable({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border/60 p-3">
-        <Input
-          placeholder="Filter by name or address..."
-          value={search}
-          onChange={(e) => setSearch(e.currentTarget.value)}
-          className="max-w-xs"
-        />
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger size="sm" className="w-40">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {statuses.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger size="sm" className="w-40">
-            <SelectValue placeholder="Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            {types.map((t) => (
-              <SelectItem key={t} value={t}>
-                {t}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={websiteFilter} onValueChange={(v) => setWebsiteFilter(v as WebsiteFilter)}>
-          <SelectTrigger size="sm" className="w-44">
-            <SelectValue placeholder="Website" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Any website status</SelectItem>
-            <SelectItem value="no-website">No website (checked)</SelectItem>
-            <SelectItem value="has-website">Has website</SelectItem>
-            <SelectItem value="not-checked">Not checked yet</SelectItem>
-          </SelectContent>
-        </Select>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {sorted.length} of {rows.length} places
-          {selected.size > 0 ? ` · ${selected.size} selected` : ""}
-        </span>
-      </div>
-
       <div ref={scrollRef} role="table" aria-label="Results" className="flex-1 overflow-auto">
         <GridRow
           role="row"

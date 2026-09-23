@@ -10,6 +10,7 @@ mod quadtree;
 mod recent_locations;
 mod robots;
 mod saved_searches;
+mod search_history;
 
 use tauri::Manager;
 
@@ -82,6 +83,7 @@ pub fn run() {
             commands::resolve_location,
             commands::list_recent_locations,
             commands::delete_recent_location,
+            commands::list_search_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

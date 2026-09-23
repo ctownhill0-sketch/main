@@ -16,6 +16,8 @@ export interface PlaceRow {
   rating: number | null;
   userRatingCount: number | null;
   lastDetailsRefreshedAt: string | null;
+  /** Raw regularOpeningHours JSON, only present after a Details fetch. */
+  regularOpeningHoursJson: string | null;
 }
 
 export type RankPreference = "RELEVANCE" | "DISTANCE";
@@ -139,6 +141,15 @@ export interface RecentLocationRow {
   useCount: number;
 }
 
+/** Mirrors src-tauri/src/search_history.rs `SearchHistoryRow`. */
+export interface SearchHistoryRow {
+  id: number;
+  kind: "quick" | "deep";
+  paramsJson: string;
+  resultCount: number;
+  ranAt: string;
+}
+
 /** Mirrors src-tauri/src/presets.rs `PresetFilters`. */
 export interface PresetFilters {
   hasWebsite: boolean | null;
@@ -216,6 +227,8 @@ export const commands = {
     invoke<ResolvedLocation>("resolve_location", { location }),
   listRecentLocations: () => invoke<RecentLocationRow[]>("list_recent_locations"),
   deleteRecentLocation: (id: number) => invoke<void>("delete_recent_location", { id }),
+
+  listSearchHistory: () => invoke<SearchHistoryRow[]>("list_search_history"),
 };
 
 /** Tauri command errors are rejected with a plain string message. */

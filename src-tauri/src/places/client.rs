@@ -90,6 +90,12 @@ pub struct PlaceResult {
     pub user_rating_count: Option<u32>,
     #[serde(rename = "googleMapsUri")]
     pub google_maps_uri: Option<String>,
+    /// Only populated when fetched with MASK_DETAILS_ENTERPRISE — stored as
+    /// raw JSON since only "is it open now" derivation is needed client-side,
+    /// not a fully structured type. Already inside MASK_DETAILS_ENTERPRISE's
+    /// field string; this was simply never deserialized until now.
+    #[serde(rename = "regularOpeningHours")]
+    pub regular_opening_hours: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Default)]

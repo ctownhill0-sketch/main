@@ -26,6 +26,9 @@ pub struct PlaceRow {
     pub rating: Option<f64>,
     pub user_rating_count: Option<i64>,
     pub last_details_refreshed_at: Option<String>,
+    /// Raw `regularOpeningHours` JSON, only present after a Details fetch.
+    /// `src/lib/opening-hours.ts` derives "open now" from this client-side.
+    pub regular_opening_hours_json: Option<String>,
 }
 
 /// Inserts a freshly-discovered place, or refreshes an existing one's
@@ -78,12 +81,17 @@ pub async fn apply_place_details(pool: &SqlitePool, place: &PlaceResult) -> Resu
     let display_name = place.display_name.as_ref().map(|n| n.text.clone());
     let lat = place.location.map(|l| l.latitude);
     let lng = place.location.map(|l| l.longitude);
+    let opening_hours_json = place
+        .regular_opening_hours
+        .as_ref()
+        .map(|v| v.to_string());
 
     sqlx::query(
         "INSERT INTO places (place_id, display_name, formatted_address, business_status, \
                               cached_lat, cached_lng, cached_at, national_phone_number, \
-                              website_uri, rating, user_rating_count, last_details_refreshed_at) \
-         VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, datetime('now')) \
+                              website_uri, rating, user_rating_count, last_details_refreshed_at, \
+                              regular_opening_hours_json) \
+         VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, datetime('now'), ?) \
          ON CONFLICT(place_id) DO UPDATE SET \
            display_name = excluded.display_name, \
            formatted_address = excluded.formatted_address, \
@@ -95,7 +103,8 @@ pub async fn apply_place_details(pool: &SqlitePool, place: &PlaceResult) -> Resu
            website_uri = excluded.website_uri, \
            rating = excluded.rating, \
            user_rating_count = excluded.user_rating_count, \
-           last_details_refreshed_at = excluded.last_details_refreshed_at",
+           last_details_refreshed_at = excluded.last_details_refreshed_at, \
+           regular_opening_hours_json = excluded.regular_opening_hours_json",
     )
     .bind(place_id)
     .bind(display_name)
@@ -107,6 +116,7 @@ pub async fn apply_place_details(pool: &SqlitePool, place: &PlaceResult) -> Resu
     .bind(&place.website_uri)
     .bind(place.rating)
     .bind(place.user_rating_count.map(|n| n as i64))
+    .bind(opening_hours_json)
     .execute(pool)
     .await?;
 
@@ -121,7 +131,8 @@ pub async fn get_places(pool: &SqlitePool, place_ids: &[String]) -> Result<Vec<P
     let sql = format!(
         "SELECT place_id, display_name, formatted_address, primary_type, business_status, \
                 cached_lat as lat, cached_lng as lng, discovered_at, cached_at, \
-                national_phone_number, website_uri, rating, user_rating_count, last_details_refreshed_at \
+                national_phone_number, website_uri, rating, user_rating_count, last_details_refreshed_at, \
+                regular_opening_hours_json \
          FROM places WHERE place_id IN ({placeholders}) ORDER BY discovered_at DESC"
     );
     let mut query = sqlx::query_as::<_, PlaceRowSql>(&sql);
@@ -136,7 +147,8 @@ pub async fn list_recent_places(pool: &SqlitePool, limit: i64) -> Result<Vec<Pla
     let rows = sqlx::query_as::<_, PlaceRowSql>(
         "SELECT place_id, display_name, formatted_address, primary_type, business_status, \
                 cached_lat as lat, cached_lng as lng, discovered_at, cached_at, \
-                national_phone_number, website_uri, rating, user_rating_count, last_details_refreshed_at \
+                national_phone_number, website_uri, rating, user_rating_count, last_details_refreshed_at, \
+                regular_opening_hours_json \
          FROM places ORDER BY discovered_at DESC LIMIT ?",
     )
     .bind(limit)
@@ -162,6 +174,7 @@ struct PlaceRowSql {
     rating: Option<f64>,
     user_rating_count: Option<i64>,
     last_details_refreshed_at: Option<String>,
+    regular_opening_hours_json: Option<String>,
 }
 
 impl From<PlaceRowSql> for PlaceRow {
@@ -181,6 +194,7 @@ impl From<PlaceRowSql> for PlaceRow {
             rating: r.rating,
             user_rating_count: r.user_rating_count,
             last_details_refreshed_at: r.last_details_refreshed_at,
+            regular_opening_hours_json: r.regular_opening_hours_json,
         }
     }
 }
@@ -242,6 +256,7 @@ mod tests {
             national_phone_number: Some("555-1234".to_string()),
             rating: Some(4.5),
             user_rating_count: Some(200),
+            regular_opening_hours: Some(serde_json::json!({"openNow": true})),
             ..Default::default()
         };
         apply_place_details(&pool, &details).await.unwrap();
@@ -253,6 +268,10 @@ mod tests {
         assert_eq!(after[0].user_rating_count, Some(200));
         assert!(after[0].last_details_refreshed_at.is_some());
         assert_eq!(after[0].discovered_at, before[0].discovered_at, "discovered_at must not change");
+        assert!(
+            after[0].regular_opening_hours_json.as_deref().unwrap().contains("openNow"),
+            "regularOpeningHours must be persisted as JSON"
+        );
     }
 
     #[tokio::test]

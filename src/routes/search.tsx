@@ -22,6 +22,7 @@ import { PresetsDropdown, SavePresetButton } from "@/components/search/presets-d
 import { TypeCombobox } from "@/components/search/type-combobox";
 import { commands, commandErrorMessage, type Preset, type RankPreference } from "@/lib/commands";
 import { estimateCostUsd, formatUsd } from "@/lib/cost";
+import { takePendingSearchAction } from "@/lib/pending-search-action";
 
 function QuickSearchForm() {
   const navigate = useNavigate();
@@ -31,6 +32,15 @@ function QuickSearchForm() {
   const [rankPreference, setRankPreference] = useState<RankPreference | "">("");
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const pending = takePendingSearchAction();
+    if (pending?.kind === "quick") {
+      setQuery(pending.query);
+      setRankPreference(pending.rankPreference ?? "");
+      setTypes(pending.types);
+    }
+  }, []);
 
   const worstCaseCostUsd = estimateCostUsd("SearchPro", 3 * Math.max(1, types.length));
 

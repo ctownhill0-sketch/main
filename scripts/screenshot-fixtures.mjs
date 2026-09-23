@@ -16,6 +16,7 @@ const samplePlaces = [
     rating: 4.6,
     userRatingCount: 812,
     lastDetailsRefreshedAt: "2026-09-21T09:00:00Z",
+    regularOpeningHoursJson: JSON.stringify({ openNow: true }),
   },
   {
     placeId: "p2",
@@ -32,6 +33,7 @@ const samplePlaces = [
     rating: 3.9,
     userRatingCount: 54,
     lastDetailsRefreshedAt: "2026-09-21T09:00:05Z",
+    regularOpeningHoursJson: JSON.stringify({ openNow: false }),
   },
   {
     placeId: "p3",
@@ -48,6 +50,7 @@ const samplePlaces = [
     rating: null,
     userRatingCount: null,
     lastDetailsRefreshedAt: null,
+    regularOpeningHoursJson: null,
   },
 ];
 
@@ -180,6 +183,28 @@ export const fixtures = {
   get_spend_summary: { monthToDateUsd: 4.32, monthlyCapUsd: 50, perRunCallCap: 200 },
   list_presets: samplePresets,
   list_recent_locations: sampleRecentLocations,
+  list_search_history: [
+    {
+      id: 1,
+      kind: "quick",
+      paramsJson: JSON.stringify({ query: "coffee shops", rankPreference: null, types: ["cafe"] }),
+      resultCount: 12,
+      ranAt: "2026-09-21T09:00:00Z",
+    },
+    {
+      id: 2,
+      kind: "deep",
+      paramsJson: JSON.stringify({
+        query: "plumbers",
+        location: "Denver, CO",
+        maxDepth: 6,
+        callCap: 200,
+        placeType: "plumber",
+      }),
+      resultCount: 87,
+      ranAt: "2026-09-19T09:00:00Z",
+    },
+  ],
   resolve_location: {
     formattedAddress: "Austin, TX, USA",
     viewport: { low: { latitude: 30.098, longitude: -97.938 }, high: { latitude: 30.517, longitude: -97.561 } },

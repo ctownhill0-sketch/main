@@ -16,6 +16,12 @@ import {
 import { ResultsTable } from "@/components/results/results-table";
 import { ResultsTableSkeleton } from "@/components/results/results-table-skeleton";
 import { EmptyStateIllustration } from "@/components/branding/empty-state-illustration";
+import {
+  DEFAULT_REFINE_FILTERS,
+  RefineBar,
+  matchesRefineFilters,
+  type RefineFilters,
+} from "@/components/results/refine-bar";
 import { estimateCostUsd, formatUsd } from "@/lib/cost";
 import { commands, commandErrorMessage, type PlaceRow } from "@/lib/commands";
 
@@ -23,6 +29,7 @@ export function ResultsPage() {
   const [rows, setRows] = useState<PlaceRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState<RefineFilters>(DEFAULT_REFINE_FILTERS);
   const [isAdding, setIsAdding] = useState(false);
   const [isFetchingDetails, setIsFetchingDetails] = useState(false);
   const [confirmDetailsOpen, setConfirmDetailsOpen] = useState(false);
@@ -136,12 +143,16 @@ export function ResultsPage() {
       )}
 
       {rows !== null && rows.length > 0 && (
-        <ResultsTable
-          rows={rows}
-          selected={selected}
-          onSelectedChange={setSelected}
-          newPlaceIds={newPlaceIds}
-        />
+        <>
+          <RefineBar rows={rows} filters={filters} onFiltersChange={setFilters} />
+          <ResultsTable
+            rows={rows}
+            predicate={(row) => matchesRefineFilters(row, filters)}
+            selected={selected}
+            onSelectedChange={setSelected}
+            newPlaceIds={newPlaceIds}
+          />
+        </>
       )}
 
       <Dialog open={confirmDetailsOpen} onOpenChange={setConfirmDetailsOpen}>

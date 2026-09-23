@@ -37,6 +37,7 @@ import { RadiusSlider } from "@/components/search/radius-slider";
 import { TypeCombobox } from "@/components/search/type-combobox";
 import { estimateCostUsd, formatUsd } from "@/lib/cost";
 import { commands, commandErrorMessage, type DeepSearchProgressEvent, type Preset } from "@/lib/commands";
+import { takePendingSearchAction } from "@/lib/pending-search-action";
 
 const DEPTH_OPTIONS = [
   { value: "4", label: "Shallow (max depth 4)" },
@@ -45,6 +46,7 @@ const DEPTH_OPTIONS = [
 ];
 
 const DEFAULT_CALL_CAP = 200;
+const EXPENSIVE_THRESHOLD_USD = 5;
 
 type RunState = "idle" | "confirming" | "running" | "done";
 
@@ -54,6 +56,7 @@ export function DeepSearchForm() {
   const [types, setTypes] = useState<string[]>([]);
   const [location, setLocation] = useState("");
   const [radiusMeters, setRadiusMeters] = useState(8000);
+  const [presetSuggestedRadiusMeters, setPresetSuggestedRadiusMeters] = useState<number | null>(null);
   const [maxDepth, setMaxDepth] = useState("6");
   const [callCap, setCallCap] = useState(String(DEFAULT_CALL_CAP));
   const [state, setState] = useState<RunState>("idle");
@@ -64,6 +67,14 @@ export function DeepSearchForm() {
   const unlistenRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
+    const pending = takePendingSearchAction();
+    if (pending?.kind === "deep") {
+      setQuery(pending.query);
+      setLocation(pending.location);
+      if (pending.maxDepth) setMaxDepth(String(pending.maxDepth));
+      if (pending.callCap) setCallCap(String(pending.callCap));
+      setTypes(pending.placeType ? [pending.placeType] : []);
+    }
     return () => {
       unlistenRef.current?.();
     };
@@ -77,8 +88,14 @@ export function DeepSearchForm() {
     setTypes(preset.types.length > 0 ? [preset.types[0]] : []);
     if (preset.suggestedRadiusMeters) {
       setRadiusMeters(preset.suggestedRadiusMeters);
+      setPresetSuggestedRadiusMeters(preset.suggestedRadiusMeters);
+    } else {
+      setPresetSuggestedRadiusMeters(null);
     }
   }
+
+  const radiusMuchLargerThanSuggested =
+    presetSuggestedRadiusMeters != null && radiusMeters > presetSuggestedRadiusMeters * 2;
 
   function handleOpenConfirm(e: FormEvent) {
     e.preventDefault();
@@ -299,6 +316,18 @@ export function DeepSearchForm() {
               estimate does not account for remaining free-tier monthly calls; check
               the Compliance panel for your current spend.
             </p>
+            {worstCaseCostUsd > EXPENSIVE_THRESHOLD_USD && (
+              <p className="text-xs text-warning">
+                This worst case exceeds {formatUsd(EXPENSIVE_THRESHOLD_USD)} — consider a lower
+                call cap or shallower coverage depth if that's more than you want to risk.
+              </p>
+            )}
+            {radiusMuchLargerThanSuggested && (
+              <p className="text-xs text-warning">
+                Your radius is more than double what {types[0] ? `"${types[0]}"` : "this preset"}{" "}
+                usually needs — you may be paying for a lot of empty area. Consider narrowing it.
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setState("idle")}>

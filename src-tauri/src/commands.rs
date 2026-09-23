@@ -14,6 +14,7 @@ use crate::places::{self, PlaceRow, PlacesClient};
 use crate::presets::{self, Preset};
 use crate::quadtree::{self, DeepSearchParams, DeepSearchProgress};
 use crate::recent_locations;
+use crate::search_history;
 use crate::saved_searches::{self, SavedSearchParams, SavedSearchRow};
 use crate::{geocoding, keychain};
 
@@ -92,9 +93,19 @@ pub async fn quick_search(
         .await
         .map_err(|e| e.to_string())?;
 
-    places::store::get_places(&db.0, &ids)
+    let rows = places::store::get_places(&db.0, &ids)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    let params_json = serde_json::json!({
+        "query": query,
+        "rankPreference": rank_preference,
+        "types": types,
+    })
+    .to_string();
+    let _ = search_history::record(&db.0, "quick", &params_json, rows.len() as i64).await;
+
+    Ok(rows)
 }
 
 #[tauri::command]
@@ -277,6 +288,16 @@ pub async fn start_deep_search(
     registry.0.lock().unwrap().remove(&run_id);
     let outcome = outcome?;
 
+    let params_json = serde_json::json!({
+        "query": query,
+        "location": location,
+        "maxDepth": max_depth,
+        "callCap": call_cap,
+        "placeType": place_type,
+    })
+    .to_string();
+    let _ = search_history::record(&db.0, "deep", &params_json, outcome.place_ids.len() as i64).await;
+
     Ok(DeepSearchSummary {
         place_ids: outcome.place_ids,
         tiles_scanned: outcome.tiles_scanned,
@@ -417,7 +438,17 @@ pub async fn run_saved_search(
         .await
         .map_err(|e| e.to_string())?;
 
+    let params_json = serde_json::json!({ "savedSearchId": id }).to_string();
+    let _ = search_history::record(&db.0, "quick", &params_json, results.len() as i64).await;
+
     Ok(RunSavedSearchResult { results, new_place_ids })
+}
+
+#[tauri::command]
+pub async fn list_search_history(
+    db: tauri::State<'_, AppDb>,
+) -> Result<Vec<search_history::SearchHistoryRow>, String> {
+    search_history::list(&db.0).await.map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------
