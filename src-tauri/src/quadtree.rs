@@ -82,6 +82,11 @@ pub struct LiveTileFetcher<'a> {
     pub client: &'a PlacesClient,
     pub api_key: &'a str,
     pub query: &'a str,
+    /// Optional single business type to filter each tile's Text Search by
+    /// (see `PlacesClient::search_text`'s doc comment on why this is
+    /// singular). Deep Search stays single-type for now — see quadtree's
+    /// module notes on why multi-type isn't supported here yet.
+    pub included_type: Option<&'a str>,
 }
 
 impl<'a> TileFetcher for LiveTileFetcher<'a> {
@@ -98,7 +103,15 @@ impl<'a> TileFetcher for LiveTileFetcher<'a> {
 
             let response = self
                 .client
-                .search_text(self.pool, self.api_key, self.query, Some(tile), None, page_token.as_deref())
+                .search_text(
+                    self.pool,
+                    self.api_key,
+                    self.query,
+                    Some(tile),
+                    None,
+                    page_token.as_deref(),
+                    self.included_type,
+                )
                 .await?;
             calls_made += 1;
 

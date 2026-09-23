@@ -67,6 +67,7 @@ pub async fn quick_search(
     client: tauri::State<'_, PlacesClient>,
     query: String,
     rank_preference: Option<String>,
+    types: Option<Vec<String>>,
 ) -> Result<Vec<PlaceRow>, String> {
     let query = query.trim();
     if query.is_empty() {
@@ -78,8 +79,9 @@ pub async fn quick_search(
         .ok_or_else(|| "No API key configured. Add one in Settings.".to_string())?;
 
     let rank = places::search::parse_rank_preference(rank_preference.as_deref());
+    let types = types.unwrap_or_default();
 
-    let ids = places::search::run_quick_search(&db.0, &client, &api_key, query, rank)
+    let ids = places::search::run_multi_type_search(&db.0, &client, &api_key, query, rank, &types)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -198,6 +200,7 @@ pub async fn start_deep_search(
     location: String,
     max_depth: Option<u32>,
     call_cap: Option<u32>,
+    place_type: Option<String>,
 ) -> Result<DeepSearchSummary, String> {
     let query = query.trim().to_string();
     let location = location.trim().to_string();
@@ -233,6 +236,7 @@ pub async fn start_deep_search(
         client: &client,
         api_key: &api_key,
         query: &query,
+        included_type: place_type.as_deref(),
     };
 
     let run_id_for_progress = run_id.clone();

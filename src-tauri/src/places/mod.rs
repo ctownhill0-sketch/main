@@ -9,6 +9,7 @@ pub mod masks;
 pub mod rate_limit;
 pub mod search;
 pub mod store;
+pub mod types;
 
 pub use client::{
     ClientError, LatLngLiteral, PlaceResult, PlacesClient, RankPreference, SearchResponse,
@@ -16,3 +17,4 @@ pub use client::{
 };
 pub use masks::{PlaceMask, MASK_DETAILS_ENTERPRISE, MASK_DISCOVERY, MASK_ID_ONLY};
 pub use store::PlaceRow;
+pub use types::{PlaceTypeDef, ALL_PLACE_TYPES};

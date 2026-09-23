@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TypeCombobox } from "@/components/search/type-combobox";
 import { estimateCostUsd, formatUsd } from "@/lib/cost";
 import { commands, commandErrorMessage, type DeepSearchProgressEvent } from "@/lib/commands";
 
@@ -47,6 +48,7 @@ type RunState = "idle" | "confirming" | "running" | "done";
 export function DeepSearchForm() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [types, setTypes] = useState<string[]>([]);
   const [location, setLocation] = useState("");
   const [maxDepth, setMaxDepth] = useState("6");
   const [callCap, setCallCap] = useState(String(DEFAULT_CALL_CAP));
@@ -94,6 +96,7 @@ export function DeepSearchForm() {
         location,
         maxDepth: Number(maxDepth),
         callCap: callCapNum,
+        placeType: types[0],
       });
       setState("done");
       const label = summary.cancelled
@@ -143,6 +146,10 @@ export function DeepSearchForm() {
                 disabled={state === "running"}
                 required
               />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Structured type (optional)</Label>
+              <TypeCombobox value={types} onChange={setTypes} multiple={false} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="deep-location">Location / area</Label>
@@ -252,6 +259,12 @@ export function DeepSearchForm() {
               <span className="text-muted-foreground">Area</span>
               <span>{location || "—"}</span>
             </div>
+            {types[0] && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Structured type</span>
+                <span>{types[0]}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Coverage depth</span>
               <span>{DEPTH_OPTIONS.find((o) => o.value === maxDepth)?.label}</span>

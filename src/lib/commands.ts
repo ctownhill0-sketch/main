@@ -113,8 +113,8 @@ export const commands = {
   validateAndStoreApiKey: (key: string) =>
     invoke<void>("validate_and_store_api_key", { key }),
   removeApiKey: () => invoke<void>("remove_api_key"),
-  quickSearch: (query: string, rankPreference?: RankPreference) =>
-    invoke<PlaceRow[]>("quick_search", { query, rankPreference }),
+  quickSearch: (query: string, rankPreference?: RankPreference, types?: string[]) =>
+    invoke<PlaceRow[]>("quick_search", { query, rankPreference, types }),
   listPlaces: () => invoke<PlaceRow[]>("list_places"),
   startDeepSearch: (params: {
     runId: string;
@@ -122,6 +122,7 @@ export const commands = {
     location: string;
     maxDepth?: number;
     callCap?: number;
+    placeType?: string;
   }) => invoke<DeepSearchSummary>("start_deep_search", params),
   cancelDeepSearch: (runId: string) => invoke<void>("cancel_deep_search", { runId }),
 

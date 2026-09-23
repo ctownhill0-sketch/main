@@ -115,7 +115,10 @@ impl PlacesClient {
 
     /// Text Search — discovery only, always `MASK_DISCOVERY`. `page_token`
     /// continues a previous query's pagination (max 3 pages / 60 results
-    /// total, enforced by the caller, not this method).
+    /// total, enforced by the caller, not this method). `included_type` is
+    /// Text Search's structured type filter — singular (one type per
+    /// request), unlike Nearby Search's `includedTypes` array — layered on
+    /// top of the free-text `query`, not a replacement for it.
     pub async fn search_text(
         &self,
         pool: &SqlitePool,
@@ -124,6 +127,7 @@ impl PlacesClient {
         location_restriction: Option<Viewport>,
         rank_preference: Option<RankPreference>,
         page_token: Option<&str>,
+        included_type: Option<&str>,
     ) -> Result<SearchResponse, ClientError> {
         let mask = PlaceMask::Discovery;
         self.check_spend_cap(pool, mask.tier()).await?;
@@ -140,6 +144,8 @@ impl PlacesClient {
             location_restriction: Option<Viewport>,
             #[serde(rename = "rankPreference", skip_serializing_if = "Option::is_none")]
             rank_preference: Option<RankPreference>,
+            #[serde(rename = "includedType", skip_serializing_if = "Option::is_none")]
+            included_type: Option<&'a str>,
         }
 
         let body = Body {
@@ -148,6 +154,7 @@ impl PlacesClient {
             page_token,
             location_restriction,
             rank_preference,
+            included_type,
         };
 
         let value = self
@@ -376,7 +383,7 @@ mod tests {
 
         let client = PlacesClient::new(5.0);
         let err = client
-            .search_text(&pool, "fake-key", "coffee shops", None, None, None)
+            .search_text(&pool, "fake-key", "coffee shops", None, None, None, None)
             .await
             .unwrap_err();
 

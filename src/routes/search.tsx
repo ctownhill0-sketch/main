@@ -17,14 +17,19 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeepSearchForm } from "@/components/search/deep-search-form";
 import { SaveSearchButton, SavedSearchesPanel } from "@/components/search/saved-searches-panel";
+import { TypeCombobox } from "@/components/search/type-combobox";
 import { commands, commandErrorMessage, type RankPreference } from "@/lib/commands";
+import { estimateCostUsd, formatUsd } from "@/lib/cost";
 
 function QuickSearchForm() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [types, setTypes] = useState<string[]>([]);
   const [rankPreference, setRankPreference] = useState<RankPreference | "">("");
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const worstCaseCostUsd = estimateCostUsd("SearchPro", 3 * Math.max(1, types.length));
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -34,9 +39,12 @@ function QuickSearchForm() {
       const results = await commands.quickSearch(
         query,
         rankPreference === "" ? undefined : rankPreference,
+        types.length > 0 ? types : undefined,
       );
       toast.success(
-        `Found ${results.length} place${results.length === 1 ? "" : "s"}.`,
+        `Found ${results.length} place${results.length === 1 ? "" : "s"}.${
+          results.length >= 60 ? " Hit the 60-result cap — try Deep Search for more." : ""
+        }`,
       );
       navigate("/results");
     } catch (err) {
@@ -74,6 +82,11 @@ function QuickSearchForm() {
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <Label>Business type (optional, combine with several)</Label>
+            <TypeCombobox value={types} onChange={setTypes} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="rank">Rank by (optional)</Label>
             <Select
               value={rankPreference}
@@ -90,6 +103,12 @@ function QuickSearchForm() {
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <p className="text-xs text-muted-foreground">
+            Estimated cost: up to {formatUsd(worstCaseCostUsd)}
+            {types.length > 1 ? ` (${types.length} types, one query each)` : ""} — usually far
+            lower; this is the ceiling if every query pages the full 60 results.
+          </p>
 
           <div className="flex gap-2">
             <Button type="submit" disabled={isSearching || query.trim().length === 0}>

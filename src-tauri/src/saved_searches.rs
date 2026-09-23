@@ -104,7 +104,7 @@ pub async fn run(
         _ => None,
     };
 
-    let place_ids = run_quick_search(pool, client, api_key, &params.query, rank).await?;
+    let place_ids = run_quick_search(pool, client, api_key, &params.query, rank, None).await?;
     let new_ids = diff_new_place_ids(pool, saved_search_id, &place_ids).await?;
 
     sqlx::query("UPDATE saved_searches SET last_run_at = datetime('now') WHERE id = ?")
