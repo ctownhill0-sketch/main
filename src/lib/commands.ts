@@ -107,6 +107,27 @@ export interface SpendSummary {
   perRunCallCap: number;
 }
 
+/** Mirrors src-tauri/src/presets.rs `PresetFilters`. */
+export interface PresetFilters {
+  hasWebsite: boolean | null;
+  maxRating: number | null;
+  maxReviewCount: number | null;
+}
+
+/**
+ * Mirrors src-tauri/src/presets.rs `Preset`. `filters` is a suggested
+ * Refine-bar starting state — not yet applied anywhere until the Refine bar
+ * exists (see refine-bar.tsx).
+ */
+export interface Preset {
+  id: string;
+  name: string;
+  types: string[];
+  suggestedRadiusMeters: number | null;
+  description: string;
+  filters: PresetFilters | null;
+}
+
 /** Typed wrappers over the Tauri command surface (src-tauri/src/commands.rs). */
 export const commands = {
   hasApiKey: () => invoke<boolean>("has_api_key"),
@@ -154,6 +175,10 @@ export const commands = {
   getSpendSummary: () => invoke<SpendSummary>("get_spend_summary"),
   setSpendCaps: (monthlyCapUsd: number, perRunCallCap: number) =>
     invoke<void>("set_spend_caps", { monthlyCapUsd, perRunCallCap }),
+
+  listPresets: () => invoke<Preset[]>("list_presets"),
+  savePreset: (preset: Preset) => invoke<void>("save_preset", { preset }),
+  deletePreset: (id: string) => invoke<void>("delete_preset", { id }),
 };
 
 /** Tauri command errors are rejected with a plain string message. */

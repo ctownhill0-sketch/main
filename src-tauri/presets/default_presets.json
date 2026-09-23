@@ -1,0 +1,82 @@
+[
+  {
+    "id": "contractors-no-website",
+    "name": "Contractors with no website",
+    "types": ["general_contractor", "roofing_contractor", "electrician", "plumber", "hvac_contractor"],
+    "suggestedRadiusMeters": 24000,
+    "description": "Home-service contractors are often small operations without a web presence — an easy no-website lead list.",
+    "filters": { "hasWebsite": false }
+  },
+  {
+    "id": "restaurants-under-4",
+    "name": "Restaurants rated under 4.0",
+    "types": ["restaurant"],
+    "suggestedRadiusMeters": 8000,
+    "description": "Restaurants with room to improve their online reputation are a classic reputation-management pitch.",
+    "filters": { "maxRating": 4.0 }
+  },
+  {
+    "id": "new-businesses-low-reviews",
+    "name": "New businesses (low review count)",
+    "types": [],
+    "suggestedRadiusMeters": 8000,
+    "description": "Very few reviews usually means recently opened — good timing for an early-outreach offer.",
+    "filters": { "maxReviewCount": 5 }
+  },
+  {
+    "id": "dentists-orthodontists",
+    "name": "Dentists and orthodontists",
+    "types": ["dentist"],
+    "suggestedRadiusMeters": 16000,
+    "description": "Google's Places API doesn't separate orthodontists from dentists — both are tagged \"dentist\".",
+    "filters": null
+  },
+  {
+    "id": "auto-repair",
+    "name": "Auto repair shops",
+    "types": ["car_repair"],
+    "suggestedRadiusMeters": 16000,
+    "description": "Independent auto shops competing against dealership service centers.",
+    "filters": null
+  },
+  {
+    "id": "gyms-fitness",
+    "name": "Gyms and fitness studios",
+    "types": ["gym"],
+    "suggestedRadiusMeters": 8000,
+    "description": "Local gyms and studios — a dense, easy-to-canvas category in most metro areas.",
+    "filters": null
+  },
+  {
+    "id": "law-firms",
+    "name": "Law firms",
+    "types": ["lawyer"],
+    "suggestedRadiusMeters": 24000,
+    "description": "Solo practitioners and small firms are usually the most responsive to outreach.",
+    "filters": null
+  },
+  {
+    "id": "hvac-plumbing",
+    "name": "HVAC and plumbing",
+    "types": ["hvac_contractor", "plumber"],
+    "suggestedRadiusMeters": 24000,
+    "description": "High-ticket home services with steady year-round demand.",
+    "filters": null
+  },
+  {
+    "id": "salons-spas",
+    "name": "Salons and spas",
+    "types": ["beauty_salon", "hair_care", "spa"],
+    "suggestedRadiusMeters": 8000,
+    "description": "Personal-care businesses, typically local and independently owned.",
+    "filters": null
+  },
+  {
+    "id": "real-estate",
+    "name": "Real estate agencies",
+    "types": ["real_estate_agency"],
+    "suggestedRadiusMeters": 24000,
+    "description": "Independent agencies and small brokerages, not the national franchises.",
+    "filters": null
+  }
+]

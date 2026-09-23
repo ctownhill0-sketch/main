@@ -6,11 +6,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::db::AppDb;
 use crate::pipeline::{self, LeadEmailRow, LeadRow, TagRow};
 use crate::places::{self, PlaceRow, PlacesClient};
+use crate::presets::{self, Preset};
 use crate::quadtree::{self, DeepSearchParams, DeepSearchProgress};
 use crate::saved_searches::{self, SavedSearchParams, SavedSearchRow};
 use crate::{geocoding, keychain};
@@ -494,4 +495,23 @@ pub async fn set_spend_caps(
     .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+fn presets_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path().app_data_dir().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_presets(app: AppHandle) -> Result<Vec<Preset>, String> {
+    presets::load_presets(&presets_dir(&app)?).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_preset(app: AppHandle, preset: Preset) -> Result<(), String> {
+    presets::save_preset(&presets_dir(&app)?, preset).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_preset(app: AppHandle, id: String) -> Result<(), String> {
+    presets::delete_preset(&presets_dir(&app)?, &id).map_err(|e| e.to_string())
 }

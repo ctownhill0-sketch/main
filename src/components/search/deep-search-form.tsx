@@ -31,9 +31,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PresetsDropdown } from "@/components/search/presets-dropdown";
 import { TypeCombobox } from "@/components/search/type-combobox";
 import { estimateCostUsd, formatUsd } from "@/lib/cost";
-import { commands, commandErrorMessage, type DeepSearchProgressEvent } from "@/lib/commands";
+import { commands, commandErrorMessage, type DeepSearchProgressEvent, type Preset } from "@/lib/commands";
 
 const DEPTH_OPTIONS = [
   { value: "4", label: "Shallow (max depth 4)" },
@@ -67,6 +68,11 @@ export function DeepSearchForm() {
 
   const callCapNum = Number(callCap) || DEFAULT_CALL_CAP;
   const worstCaseCostUsd = estimateCostUsd("SearchPro", callCapNum);
+
+  function handleApplyPreset(preset: Preset) {
+    // Deep Search stays single-type — take the preset's first type, if any.
+    setTypes(preset.types.length > 0 ? [preset.types[0]] : []);
+  }
 
   function handleOpenConfirm(e: FormEvent) {
     e.preventDefault();
@@ -136,6 +142,7 @@ export function DeepSearchForm() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleOpenConfirm} className="flex flex-col gap-4">
+            <PresetsDropdown onApply={handleApplyPreset} />
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="deep-query">Business type / keyword</Label>
               <Input

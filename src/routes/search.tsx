@@ -17,8 +17,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeepSearchForm } from "@/components/search/deep-search-form";
 import { SaveSearchButton, SavedSearchesPanel } from "@/components/search/saved-searches-panel";
+import { PresetsDropdown, SavePresetButton } from "@/components/search/presets-dropdown";
 import { TypeCombobox } from "@/components/search/type-combobox";
-import { commands, commandErrorMessage, type RankPreference } from "@/lib/commands";
+import { commands, commandErrorMessage, type Preset, type RankPreference } from "@/lib/commands";
 import { estimateCostUsd, formatUsd } from "@/lib/cost";
 
 function QuickSearchForm() {
@@ -30,6 +31,11 @@ function QuickSearchForm() {
   const [error, setError] = useState<string | null>(null);
 
   const worstCaseCostUsd = estimateCostUsd("SearchPro", 3 * Math.max(1, types.length));
+
+  function handleApplyPreset(preset: Preset) {
+    setTypes(preset.types);
+    toast.success(`Applied "${preset.name}".`);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -69,6 +75,8 @@ function QuickSearchForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <PresetsDropdown onApply={handleApplyPreset} />
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="query">Query</Label>
             <Input
@@ -119,6 +127,7 @@ function QuickSearchForm() {
               query={query}
               rankPreference={rankPreference === "" ? undefined : rankPreference}
             />
+            <SavePresetButton types={types} />
           </div>
         </form>
       </CardContent>

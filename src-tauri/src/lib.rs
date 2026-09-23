@@ -5,6 +5,7 @@ mod geocoding;
 mod keychain;
 mod pipeline;
 mod places;
+mod presets;
 mod quadtree;
 mod robots;
 mod saved_searches;
@@ -73,6 +74,9 @@ pub fn run() {
             commands::list_lead_emails,
             commands::get_spend_summary,
             commands::set_spend_caps,
+            commands::list_presets,
+            commands::save_preset,
+            commands::delete_preset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

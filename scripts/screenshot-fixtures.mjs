@@ -126,6 +126,25 @@ const sampleLeadEmails = [
   },
 ];
 
+const samplePresets = [
+  {
+    id: "contractors-no-website",
+    name: "Contractors with no website",
+    types: ["general_contractor", "roofing_contractor", "electrician", "plumber", "hvac_contractor"],
+    suggestedRadiusMeters: 24000,
+    description: "Home-service contractors are often small operations without a web presence.",
+    filters: { hasWebsite: false, maxRating: null, maxReviewCount: null },
+  },
+  {
+    id: "restaurants-under-4",
+    name: "Restaurants rated under 4.0",
+    types: ["restaurant"],
+    suggestedRadiusMeters: 8000,
+    description: "Restaurants with room to improve their online reputation.",
+    filters: { hasWebsite: null, maxRating: 4.0, maxReviewCount: null },
+  },
+];
+
 export const fixtures = {
   has_api_key: true,
   list_places: samplePlaces,
@@ -136,4 +155,5 @@ export const fixtures = {
   list_saved_searches: sampleSavedSearches,
   list_lead_emails: sampleLeadEmails,
   get_spend_summary: { monthToDateUsd: 4.32, monthlyCapUsd: 50, perRunCallCap: 200 },
+  list_presets: samplePresets,
 };
