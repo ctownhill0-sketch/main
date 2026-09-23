@@ -148,6 +148,35 @@ No custom webfont is loaded. The `sans` stack is the OS's native UI font
 app should render instantly with zero font-fetch latency and feel native to each
 platform, not impose a single brand typeface across all three.
 
+## Logo & Branding
+
+The LeadScout mark is a "radar signal": three concentric arcs sweeping from an
+origin point, with a highlighted dot on the outer ring standing in for a
+discovered business. Source of truth is
+`src-tauri/icons/source/leadscout-mark.svg`, hand-mirrored into
+`src/components/branding/wordmark.tsx`'s `LogoMark`.
+
+- **Single flat fill, `currentColor` only.** The mark never carries its own
+  hardcoded color — it renders in whatever ink color the caller sets, always
+  one of `--primary`/`--foreground`/`--muted-foreground`, never a new hue.
+  The app-icon PNG export is the one static exception (it needs real pixels,
+  not CSS): white background, near-black (`#111111`) mark, regenerated via
+  `pnpm tauri icon src-tauri/icons/source/leadscout-icon-1024.png` if the mark
+  ever changes.
+- **Safe area.** The mark's geometry is drawn on a 1024×1024 canvas with all
+  content kept within the center ~832×832 (~8-9% margin per side) so macOS's
+  own squircle corner-mask never clips it.
+- **Two variants.** `<Wordmark variant="full" />` (mark + "LeadScout" text) for
+  contexts with room — the sidebar header, the About screen's title.
+  `<Wordmark variant="mark" />` (icon only) for tight spaces — collapsed/small
+  contexts and the onboarding splash.
+- **Minimum size.** Legible down to 16px (the smallest app-icon export); below
+  that, use `variant="mark"` at no smaller than 16px rather than shrinking
+  further.
+- **Don't** recolor the mark, add a gradient, or give it its own drop shadow —
+  it follows the same neutral-ink rule as every other icon in the app (see
+  Colors above: "no new hue" applies to the logo too, not just feature UI).
+
 ## Shapes
 
 `rounded.base` (0.5rem) is the only radius decision in the system — shadcn/ui's

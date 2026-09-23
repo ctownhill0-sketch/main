@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  InfoIcon,
   KanbanIcon,
   PlusIcon,
   SearchCheckIcon,
@@ -25,6 +26,7 @@ const ROUTES = [
   { to: "/pipeline", label: "Pipeline", icon: KanbanIcon },
   { to: "/compliance", label: "Compliance", icon: ShieldCheckIcon },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
+  { to: "/about", label: "About", icon: InfoIcon },
 ] as const;
 
 export function CommandPalette() {

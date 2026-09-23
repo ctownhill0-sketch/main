@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { CheckCircle2Icon, KeyRoundIcon, Loader2Icon } from "lucide-react";
+import { CheckCircle2Icon, InfoIcon, KeyRoundIcon, Loader2Icon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -115,6 +116,14 @@ export function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Link
+        to="/about"
+        className="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
+      >
+        <InfoIcon className="size-3.5" />
+        About LeadScout
+      </Link>
     </div>
   );
 }

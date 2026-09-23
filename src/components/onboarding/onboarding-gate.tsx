@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Loader2Icon } from "lucide-react";
 
+import { Wordmark } from "@/components/branding/wordmark";
 import { useApiKeyStatus } from "@/hooks/use-api-key-status";
 import { OnboardingPage } from "@/routes/onboarding";
 
@@ -9,8 +9,8 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
 
   if (status === "loading") {
     return (
-      <div role="status" aria-label="Loading" className="flex h-screen w-screen items-center justify-center">
-        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+      <div role="status" aria-label="Loading" className="flex h-dvh w-screen items-center justify-center bg-background">
+        <Wordmark variant="mark" className="size-10 animate-pulse text-muted-foreground" />
       </div>
     );
   }

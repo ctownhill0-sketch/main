@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/table";
 import { ConfirmAlertDialog } from "@/components/common/confirm-alert-dialog";
 import { GoogleAttribution } from "@/components/common/google-attribution";
+import { EmptyStateIllustration } from "@/components/branding/empty-state-illustration";
 import { EmailsDialog } from "@/components/pipeline/emails-dialog";
 import { NotesDialog } from "@/components/pipeline/notes-dialog";
 import { PipelineTableSkeleton } from "@/components/pipeline/pipeline-table-skeleton";
@@ -189,6 +190,7 @@ export function PipelinePage() {
       {error && <div className="p-6 text-sm text-destructive">{error}</div>}
       {leads !== null && leads.length === 0 && !error && (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+          <EmptyStateIllustration kind="pipeline" className="size-24 text-muted-foreground/40" />
           <p>No leads yet — select places in Results and "Add to pipeline".</p>
           <Button asChild size="sm">
             <Link to="/results">Go to Results</Link>

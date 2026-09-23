@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { ResultsTable } from "@/components/results/results-table";
 import { ResultsTableSkeleton } from "@/components/results/results-table-skeleton";
+import { EmptyStateIllustration } from "@/components/branding/empty-state-illustration";
 import { estimateCostUsd, formatUsd } from "@/lib/cost";
 import { commands, commandErrorMessage, type PlaceRow } from "@/lib/commands";
 
@@ -126,6 +127,7 @@ export function ResultsPage() {
 
       {rows !== null && rows.length === 0 && !error && (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+          <EmptyStateIllustration kind="results" className="size-24 text-muted-foreground/40" />
           <p>No results yet — run a search first.</p>
           <Button asChild size="sm">
             <Link to="/search">Go to Search</Link>

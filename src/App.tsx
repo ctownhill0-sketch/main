@@ -8,6 +8,7 @@ import { ResultsPage } from "@/routes/results";
 import { PipelinePage } from "@/routes/pipeline";
 import { CompliancePage } from "@/routes/compliance";
 import { SettingsPage } from "@/routes/settings";
+import { AboutPage } from "@/routes/about";
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
             <Route path="/pipeline" element={<PipelinePage />} />
             <Route path="/compliance" element={<CompliancePage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/about" element={<AboutPage />} />
           </Routes>
         </AppShell>
         <CommandPalette />

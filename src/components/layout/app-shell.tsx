@@ -6,11 +6,11 @@ import {
   KanbanIcon,
   ShieldCheckIcon,
   SettingsIcon,
-  MapPinIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { isMacOS } from "@/lib/platform";
+import { Wordmark } from "@/components/branding/wordmark";
 
 const NAV_ITEMS = [
   { to: "/search", label: "Search", icon: SearchIcon },
@@ -35,10 +35,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             macOS && "pl-20",
           )}
         >
-          <MapPinIcon className="pointer-events-none size-5 text-primary" />
-          <span className="pointer-events-none text-sm font-semibold tracking-tight">
-            LeadScout
-          </span>
+          <Wordmark className="pointer-events-none text-primary" />
         </div>
         <nav className="flex select-none flex-col gap-0.5 px-2">
           {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
