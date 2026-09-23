@@ -107,6 +107,38 @@ export interface SpendSummary {
   perRunCallCap: number;
 }
 
+/** Mirrors src-tauri/src/places/client.rs `LatLngLiteral`. */
+export interface LatLngLiteral {
+  latitude: number;
+  longitude: number;
+}
+
+/** Mirrors src-tauri/src/places/client.rs `Viewport`. */
+export interface Viewport {
+  low: LatLngLiteral;
+  high: LatLngLiteral;
+}
+
+/** Mirrors src-tauri/src/commands.rs `ResolvedLocation`. */
+export interface ResolvedLocation {
+  formattedAddress: string;
+  viewport: Viewport;
+  approxWidthKm: number;
+  approxHeightKm: number;
+}
+
+/** Mirrors src-tauri/src/recent_locations.rs `RecentLocationRow`. */
+export interface RecentLocationRow {
+  id: number;
+  formattedAddress: string;
+  lowLat: number;
+  lowLng: number;
+  highLat: number;
+  highLng: number;
+  lastUsedAt: string;
+  useCount: number;
+}
+
 /** Mirrors src-tauri/src/presets.rs `PresetFilters`. */
 export interface PresetFilters {
   hasWebsite: boolean | null;
@@ -179,6 +211,11 @@ export const commands = {
   listPresets: () => invoke<Preset[]>("list_presets"),
   savePreset: (preset: Preset) => invoke<void>("save_preset", { preset }),
   deletePreset: (id: string) => invoke<void>("delete_preset", { id }),
+
+  resolveLocation: (location: string) =>
+    invoke<ResolvedLocation>("resolve_location", { location }),
+  listRecentLocations: () => invoke<RecentLocationRow[]>("list_recent_locations"),
+  deleteRecentLocation: (id: number) => invoke<void>("delete_recent_location", { id }),
 };
 
 /** Tauri command errors are rejected with a plain string message. */

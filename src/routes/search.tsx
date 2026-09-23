@@ -17,6 +17,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeepSearchForm } from "@/components/search/deep-search-form";
 import { SaveSearchButton, SavedSearchesPanel } from "@/components/search/saved-searches-panel";
+import { LocationInput } from "@/components/search/location-input";
 import { PresetsDropdown, SavePresetButton } from "@/components/search/presets-dropdown";
 import { TypeCombobox } from "@/components/search/type-combobox";
 import { commands, commandErrorMessage, type Preset, type RankPreference } from "@/lib/commands";
@@ -26,6 +27,7 @@ function QuickSearchForm() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [types, setTypes] = useState<string[]>([]);
+  const [location, setLocation] = useState("");
   const [rankPreference, setRankPreference] = useState<RankPreference | "">("");
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,9 +43,10 @@ function QuickSearchForm() {
     e.preventDefault();
     setError(null);
     setIsSearching(true);
+    const finalQuery = location.trim() ? `${query} in ${location.trim()}` : query;
     try {
       const results = await commands.quickSearch(
-        query,
+        finalQuery,
         rankPreference === "" ? undefined : rankPreference,
         types.length > 0 ? types : undefined,
       );
@@ -68,9 +71,10 @@ function QuickSearchForm() {
           <CardTitle className="text-sm">Search Google Places</CardTitle>
         </div>
         <CardDescription>
-          Combine business type and location in one query, the way you would on
-          Google Maps — e.g. "plumbers in Denver, CO" or "coffee shops near
-          downtown Austin". Returns up to 60 results (3 pages of 20).
+          A free-text query, the way you would on Google Maps — e.g. "plumbers"
+          or "coffee shops near downtown". Add a location and/or structured
+          business type below for more precision. Returns up to 60 results (3
+          pages of 20).
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -81,11 +85,22 @@ function QuickSearchForm() {
             <Label htmlFor="query">Query</Label>
             <Input
               id="query"
-              placeholder="coffee shops in Austin, TX"
+              placeholder="coffee shops"
               value={query}
               onChange={(e) => setQuery(e.currentTarget.value)}
               disabled={isSearching}
               required
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="location">Location (optional)</Label>
+            <LocationInput
+              id="location"
+              value={location}
+              onChange={setLocation}
+              disabled={isSearching}
+              placeholder="Austin, TX"
             />
           </div>
 

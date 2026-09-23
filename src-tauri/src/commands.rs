@@ -13,6 +13,7 @@ use crate::pipeline::{self, LeadEmailRow, LeadRow, TagRow};
 use crate::places::{self, PlaceRow, PlacesClient};
 use crate::presets::{self, Preset};
 use crate::quadtree::{self, DeepSearchParams, DeepSearchProgress};
+use crate::recent_locations;
 use crate::saved_searches::{self, SavedSearchParams, SavedSearchRow};
 use crate::{geocoding, keychain};
 
@@ -32,13 +33,18 @@ pub fn has_api_key() -> Result<bool, String> {
 /// only if valid, stores it in the OS keychain. Returns a user-facing error
 /// message on either a bad key or a network failure.
 #[tauri::command]
-pub async fn validate_and_store_api_key(key: String) -> Result<(), String> {
+pub async fn validate_and_store_api_key(
+    db: tauri::State<'_, AppDb>,
+    geocoding_client: tauri::State<'_, geocoding::GeocodingClient>,
+    key: String,
+) -> Result<(), String> {
     let trimmed = key.trim();
     if trimmed.is_empty() {
         return Err("API key cannot be empty.".to_string());
     }
 
-    let result = geocoding::validate_api_key(trimmed)
+    let result = geocoding_client
+        .validate_api_key(&db.0, trimmed)
         .await
         .map_err(|e| format!("Couldn't reach Google to validate the key: {e}"))?;
 
@@ -195,6 +201,7 @@ pub async fn start_deep_search(
     app: AppHandle,
     db: tauri::State<'_, AppDb>,
     client: tauri::State<'_, PlacesClient>,
+    geocoding_client: tauri::State<'_, geocoding::GeocodingClient>,
     registry: tauri::State<'_, DeepSearchRegistry>,
     run_id: String,
     query: String,
@@ -216,9 +223,11 @@ pub async fn start_deep_search(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "No API key configured. Add one in Settings.".to_string())?;
 
-    let area = geocoding::geocode_to_viewport(&api_key, &location)
+    let area = geocoding_client
+        .geocode_to_viewport(&db.0, &api_key, &location)
         .await
         .map_err(|e| e.to_string())?;
+    recent_locations::record(&db.0, &area).await.map_err(|e| e.to_string())?;
 
     let configured_cap = places::cost::get_per_run_call_cap(&db.0)
         .await
@@ -514,4 +523,86 @@ pub fn save_preset(app: AppHandle, preset: Preset) -> Result<(), String> {
 #[tauri::command]
 pub fn delete_preset(app: AppHandle, id: String) -> Result<(), String> {
     presets::delete_preset(&presets_dir(&app)?, &id).map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedLocation {
+    formatted_address: String,
+    viewport: places::Viewport,
+    approx_width_km: f64,
+    approx_height_km: f64,
+}
+
+/// Great-circle distance between two points, in kilometers — used only for
+/// the resolved-location UI's rough width/height display, not for anything
+/// that affects billing or search behavior.
+fn haversine_km(lat1: f64, lng1: f64, lat2: f64, lng2: f64) -> f64 {
+    const EARTH_RADIUS_KM: f64 = 6371.0;
+    let (lat1_rad, lat2_rad) = (lat1.to_radians(), lat2.to_radians());
+    let d_lat = lat2_rad - lat1_rad;
+    let d_lng = (lng2 - lng1).to_radians();
+    let a = (d_lat / 2.0).sin().powi(2) + lat1_rad.cos() * lat2_rad.cos() * (d_lng / 2.0).sin().powi(2);
+    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
+    EARTH_RADIUS_KM * c
+}
+
+/// The debounced-input target for the shared search surface's location
+/// field: resolves a typed location to an area (one Geocoding call),
+/// records it into `recent_locations`, and returns a rough width/height for
+/// the confirmation chip. Debouncing itself is a frontend concern (see
+/// `useDebouncedValue`) — this command always fires exactly one call.
+#[tauri::command]
+pub async fn resolve_location(
+    db: tauri::State<'_, AppDb>,
+    geocoding_client: tauri::State<'_, geocoding::GeocodingClient>,
+    location: String,
+) -> Result<ResolvedLocation, String> {
+    let location = location.trim();
+    if location.is_empty() {
+        return Err("Enter a location.".to_string());
+    }
+
+    let api_key = keychain::get_api_key()
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No API key configured. Add one in Settings.".to_string())?;
+
+    let area = geocoding_client
+        .geocode_to_viewport(&db.0, &api_key, location)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    recent_locations::record(&db.0, &area).await.map_err(|e| e.to_string())?;
+
+    let approx_width_km = haversine_km(
+        area.viewport.low.latitude,
+        area.viewport.low.longitude,
+        area.viewport.low.latitude,
+        area.viewport.high.longitude,
+    );
+    let approx_height_km = haversine_km(
+        area.viewport.low.latitude,
+        area.viewport.low.longitude,
+        area.viewport.high.latitude,
+        area.viewport.low.longitude,
+    );
+
+    Ok(ResolvedLocation {
+        formatted_address: area.formatted_address,
+        viewport: area.viewport,
+        approx_width_km,
+        approx_height_km,
+    })
+}
+
+#[tauri::command]
+pub async fn list_recent_locations(
+    db: tauri::State<'_, AppDb>,
+) -> Result<Vec<recent_locations::RecentLocationRow>, String> {
+    recent_locations::list(&db.0).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_recent_location(db: tauri::State<'_, AppDb>, id: i64) -> Result<(), String> {
+    recent_locations::delete(&db.0, id).await.map_err(|e| e.to_string())
 }

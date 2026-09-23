@@ -7,6 +7,7 @@ mod pipeline;
 mod places;
 mod presets;
 mod quadtree;
+mod recent_locations;
 mod robots;
 mod saved_searches;
 
@@ -42,6 +43,7 @@ pub fn run() {
                     .await
                     .unwrap_or(5.0);
                 handle.manage(places::PlacesClient::new(qps));
+                handle.manage(geocoding::GeocodingClient::new(qps));
 
                 handle.manage(db::AppDb(pool));
             });
@@ -77,6 +79,9 @@ pub fn run() {
             commands::list_presets,
             commands::save_preset,
             commands::delete_preset,
+            commands::resolve_location,
+            commands::list_recent_locations,
+            commands::delete_recent_location,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

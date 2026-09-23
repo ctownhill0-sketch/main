@@ -82,6 +82,7 @@ mod tests {
             "saved_search_seen_places",
             "api_call_log",
             "settings",
+            "recent_locations",
         ] {
             assert!(names.contains(&expected.to_string()), "missing table {expected}");
         }

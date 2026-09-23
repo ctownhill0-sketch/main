@@ -31,7 +31,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LocationInput } from "@/components/search/location-input";
 import { PresetsDropdown } from "@/components/search/presets-dropdown";
+import { RadiusSlider } from "@/components/search/radius-slider";
 import { TypeCombobox } from "@/components/search/type-combobox";
 import { estimateCostUsd, formatUsd } from "@/lib/cost";
 import { commands, commandErrorMessage, type DeepSearchProgressEvent, type Preset } from "@/lib/commands";
@@ -51,6 +53,7 @@ export function DeepSearchForm() {
   const [query, setQuery] = useState("");
   const [types, setTypes] = useState<string[]>([]);
   const [location, setLocation] = useState("");
+  const [radiusMeters, setRadiusMeters] = useState(8000);
   const [maxDepth, setMaxDepth] = useState("6");
   const [callCap, setCallCap] = useState(String(DEFAULT_CALL_CAP));
   const [state, setState] = useState<RunState>("idle");
@@ -72,6 +75,9 @@ export function DeepSearchForm() {
   function handleApplyPreset(preset: Preset) {
     // Deep Search stays single-type — take the preset's first type, if any.
     setTypes(preset.types.length > 0 ? [preset.types[0]] : []);
+    if (preset.suggestedRadiusMeters) {
+      setRadiusMeters(preset.suggestedRadiusMeters);
+    }
   }
 
   function handleOpenConfirm(e: FormEvent) {
@@ -160,15 +166,15 @@ export function DeepSearchForm() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="deep-location">Location / area</Label>
-              <Input
+              <LocationInput
                 id="deep-location"
                 placeholder="Austin, TX"
                 value={location}
-                onChange={(e) => setLocation(e.currentTarget.value)}
+                onChange={setLocation}
                 disabled={state === "running"}
-                required
               />
             </div>
+            <RadiusSlider meters={radiusMeters} onChange={setRadiusMeters} disabled={state === "running"} />
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="deep-depth">Coverage depth</Label>

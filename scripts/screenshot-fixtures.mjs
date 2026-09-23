@@ -145,6 +145,29 @@ const samplePresets = [
   },
 ];
 
+const sampleRecentLocations = [
+  {
+    id: 1,
+    formattedAddress: "Austin, TX, USA",
+    lowLat: 30.098,
+    lowLng: -97.938,
+    highLat: 30.517,
+    highLng: -97.561,
+    lastUsedAt: "2026-09-21T09:00:00Z",
+    useCount: 3,
+  },
+  {
+    id: 2,
+    formattedAddress: "Denver, CO, USA",
+    lowLat: 39.614,
+    lowLng: -105.109,
+    highLat: 39.914,
+    highLng: -104.6,
+    lastUsedAt: "2026-09-18T09:00:00Z",
+    useCount: 1,
+  },
+];
+
 export const fixtures = {
   has_api_key: true,
   list_places: samplePlaces,
@@ -156,4 +179,11 @@ export const fixtures = {
   list_lead_emails: sampleLeadEmails,
   get_spend_summary: { monthToDateUsd: 4.32, monthlyCapUsd: 50, perRunCallCap: 200 },
   list_presets: samplePresets,
+  list_recent_locations: sampleRecentLocations,
+  resolve_location: {
+    formattedAddress: "Austin, TX, USA",
+    viewport: { low: { latitude: 30.098, longitude: -97.938 }, high: { latitude: 30.517, longitude: -97.561 } },
+    approxWidthKm: 36,
+    approxHeightKm: 46,
+  },
 };
